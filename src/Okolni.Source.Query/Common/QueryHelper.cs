@@ -317,7 +317,7 @@ internal static class QueryHelper
 #if DEBUG
                     if (retries > 0)
                     {
-                        Console.WriteLine($"Took {retries}....");
+                        Console.WriteLine($"Took {retries} retries for {endPoint}....");
                     }
 #endif
 
@@ -326,9 +326,6 @@ internal static class QueryHelper
             // Any timeout is just another signal to continue
             catch (TimeoutException)
             {
-#if DEBUG
-                    Console.WriteLine("One Retry Timed out...");
-#endif
                 /* Nom */
             }
             finally
