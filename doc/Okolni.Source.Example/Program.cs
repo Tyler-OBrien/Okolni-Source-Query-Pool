@@ -40,9 +40,6 @@ public class Program
         var serverEndpoint5 = new IPEndPoint(IPAddress.Parse("176.57.140.69"), 28915);
 
 
-        var infotaskTest = await connPool.GetInfoAsync(serverEndpoint1);
-
-
         var infoTask1 = connPool.GetInfoAsync(serverEndpoint1);
         var infoTask2 = connPool.GetInfoAsync(serverEndpoint2);
         var infoTask3 = connPool.GetInfoAsync(serverEndpoint3);
@@ -56,6 +53,7 @@ public class Program
         Console.WriteLine($"Server info: {info3}");
         Console.WriteLine($"Server info: {info4}");
         Console.WriteLine($"Server info: {info5}");
-        
+        // If not using `using` statement
+        connPool.Dispose();
     }
 }

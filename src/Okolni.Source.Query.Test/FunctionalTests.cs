@@ -41,7 +41,7 @@ namespace Okolni.Source.Query.Test
             Assert.IsNotNull(players);
             Assert.IsNotNull(rules);
             Assert.IsNotNull(info);
-
+            conn.Dispose();
         }
 
         [TestMethod]
@@ -73,6 +73,7 @@ namespace Okolni.Source.Query.Test
             Assert.IsNotNull(players);
             Assert.IsNotNull(rules);
             Assert.IsNotNull(info);
+            conn.Dispose();
         }
         [TestMethod]
         public async Task QueryTestPool()
@@ -86,10 +87,6 @@ namespace Okolni.Source.Query.Test
             var serverEndpoint4 = new IPEndPoint(IPAddress.Parse("147.135.30.212"), 5746);
             var serverEndpoint5 = new IPEndPoint(IPAddress.Parse("176.57.140.69"), 28915);
 
-
-            var infotaskTest = await connPool.GetInfoAsync(serverEndpoint1);
-
-
             var infoTask1 = connPool.GetInfoAsync(serverEndpoint1);
             var infoTask2 = connPool.GetInfoAsync(serverEndpoint2);
             var infoTask3 = connPool.GetInfoAsync(serverEndpoint3);
@@ -102,6 +99,7 @@ namespace Okolni.Source.Query.Test
             Assert.IsNotNull(info3);
             Assert.IsNotNull(info4);
             Assert.IsNotNull(info5);
+            connPool.Dispose();
         }
     }
 }
