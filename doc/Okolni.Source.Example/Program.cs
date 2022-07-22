@@ -31,6 +31,11 @@ public class Program
 
 
         using IQueryConnectionPool connPool = new QueryConnectionPool();
+        connPool.Message += msg =>
+        {
+            Console.WriteLine("Pool Responded with Message:" + msg);
+        };
+        connPool.Error += exception => throw exception;
         connPool.ReceiveTimeout = 500;
         connPool.SendTimeout = 500;
         var serverEndpoint1 = new IPEndPoint(IPAddress.Parse(Host), Port);

@@ -22,6 +22,12 @@ namespace Okolni.Source.Query.Source
         int ReceiveTimeout { get; set; }
 
 
+        public delegate void PoolError(Exception ex);
+        public event PoolError Error;
+
+        public delegate void PoolMessage(string msg);
+        public event PoolMessage Message;
+
 
 
 

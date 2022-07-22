@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using Okolni.Source.Common;
 
 namespace Okolni.Source.Query.Common.SocketHelpers;
 /*
@@ -131,7 +132,7 @@ public class UDPDeMultiplexer
                 Memory<byte> buffer = new byte[65527];
                 var udpClientReceiveTask = socket.ReceiveFromAsync(buffer, SocketFlags.None, endPoint,
                     newCancellationTokenSource.Token).AsTask();
-
+                // Todo: Rework this to use timeout in the socket function (right now, I believe there is a short period between cancelling the Task and us stop checking for responses
                 if (await Task.WhenAny(udpClientReceiveTask, Task.Delay(500, newCancellationTokenSource.Token)) ==
                     udpClientReceiveTask)
                     try
