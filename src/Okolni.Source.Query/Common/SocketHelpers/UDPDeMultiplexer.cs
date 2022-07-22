@@ -120,14 +120,14 @@ public class UDPDeMultiplexer
     }
 
 
-    public async Task Start(Socket socket, IPEndPoint endPoint)
+    public async Task Start(Socket socket, IPEndPoint endPoint, CancellationToken token)
     {
         try
         {
             while (true)
             {
-                var newCancellationTokenSource = new CancellationTokenSource();
-
+                if (token.IsCancellationRequested) break;
+                var newCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(token);
                 Memory<byte> buffer = new byte[65527];
                 var udpClientReceiveTask = socket.ReceiveFromAsync(buffer, SocketFlags.None, endPoint,
                     newCancellationTokenSource.Token).AsTask();

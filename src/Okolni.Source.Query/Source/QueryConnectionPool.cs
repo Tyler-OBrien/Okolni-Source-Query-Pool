@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
 using System.Threading.Tasks;
 using Okolni.Source.Common;
 using Okolni.Source.Query.Common;
@@ -13,11 +14,13 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
 {
     private readonly UDPDeMultiplexer m_demultiplexer;
     private readonly Socket m_sharedsocket;
-
     private readonly DemuxSocket m_socket;
+    private readonly CancellationTokenSource m_cancellationTokenSource;
 
     public QueryConnectionPool()
     {
+        m_cancellationTokenSource = new CancellationTokenSource();
+        // This only supports IPv4, but right now, so does Steam.
         m_sharedsocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
         SendTimeout = 1000;
         ReceiveTimeout = 1000;
@@ -25,11 +28,11 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
         m_demultiplexer = new UDPDeMultiplexer();
         var ipendpoint = new IPEndPoint(IPAddress.Any, 0);
         m_sharedsocket.Bind(ipendpoint);
-        _ = m_demultiplexer.Start(m_sharedsocket, ipendpoint).ContinueWith(t => Console.WriteLine(t.Exception),
+        _ = m_demultiplexer.Start(m_sharedsocket, ipendpoint, m_cancellationTokenSource.Token).ContinueWith(t => Console.WriteLine(t.Exception),
                 TaskContinuationOptions.OnlyOnFaulted)
             .ContinueWith(t => Console.WriteLine($"Worker exited safely {t.Status}"),
                 TaskContinuationOptions.OnlyOnRanToCompletion);
-        ;
+        
         m_socket = new DemuxSocket(m_sharedsocket, m_demultiplexer);
     }
 
@@ -104,6 +107,8 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
 
     public void Dispose()
     {
+        if (!m_cancellationTokenSource.IsCancellationRequested)
+            m_cancellationTokenSource?.Cancel();
         m_sharedsocket?.Dispose();
     }
 }
