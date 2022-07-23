@@ -184,7 +184,7 @@ internal static class QueryHelper
         }
         catch (Exception ex)
         {
-            throw new SourceQueryException("Could not gather Info", ex);
+            throw new SourceQueryException($"Could not gather Info for {endPoint}", ex);
         }
     }
 
@@ -234,7 +234,7 @@ internal static class QueryHelper
         }
         catch (Exception ex)
         {
-            throw new SourceQueryException("Could not gather Players", ex);
+            throw new SourceQueryException($"Could not gather Players for {endPoint}", ex);
         }
     }
 
@@ -266,7 +266,7 @@ internal static class QueryHelper
         }
         catch (Exception ex)
         {
-            throw new SourceQueryException("Could not gather Rules", ex);
+            throw new SourceQueryException($"Could not gather Rules for {endPoint}", ex);
         }
     }
 
