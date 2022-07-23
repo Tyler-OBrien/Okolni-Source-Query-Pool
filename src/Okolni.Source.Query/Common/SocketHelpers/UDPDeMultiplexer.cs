@@ -75,38 +75,37 @@ public class UDPDeMultiplexer
     {
         lock (mutex)
         {
-            if (Connections.TryGetValue(remoteEndPoint, out var connections))
+            if (Connections.TryGetValue(remoteEndPoint, out var demuxConnections))
             {
-                if (connections.Connections.TryDequeue(out var value))
+                if (demuxConnections.Connections.TryDequeue(out var value))
                 {
+                    // Dirty, meaning it has content for us..
                     if (value.BufferDirty)
                     {
 #if DEBUG
                         Console.WriteLine(
                             $"Found instantly for {remoteEndPoint}...exiting early... {Convert.ToBase64String(value.MemoryBuffer.ToArray().Take(10).ToArray())}");
 #endif
-
+                        RemoveIfEmpty(remoteEndPoint, demuxConnections);
                         value.MemoryBuffer.CopyTo(buffer);
                         return new ValueTask<SocketReceiveFromResult>(value.ReceiveFrom.Task);
                     }
-
-                    var taskCompletionSourceQueue = new TaskCompletionSource<SocketReceiveFromResult>();
-                    Connections.Add(remoteEndPoint,
-                        new DemuxConnections(new DemuxConnection(taskCompletionSourceQueue, buffer, false, false,
-                            cancellationToken)));
-#if DEBUG
-                    Console.WriteLine($"New Listener: {remoteEndPoint} - {remoteEndPoint.Serialize()}");
-#endif
-                    return new ValueTask<SocketReceiveFromResult>(taskCompletionSourceQueue.Task);
+                    else
+                    {
+                        // If it isn't dirty, it's waiting just like us, and we should add it back.
+                        demuxConnections.Connections.Enqueue(value);
+                    }
                 }
+                // If we couldn't get anything from the queue, or we could but it wasn't dirty, we should enqueue our own item.
                 var taskCompletionSource = new TaskCompletionSource<SocketReceiveFromResult>();
-                connections.Connections.Enqueue(new DemuxConnection(taskCompletionSource, buffer, false, false,
+                demuxConnections.Connections.Enqueue(new DemuxConnection(taskCompletionSource, buffer, false, false,
                     cancellationToken));
 #if DEBUG
                     Console.WriteLine($"New Listener: {remoteEndPoint} - {remoteEndPoint.Serialize()}");
 #endif
                 return new ValueTask<SocketReceiveFromResult>(taskCompletionSource.Task);
             }
+            // If there's no queue yet, we should create it and add it.
             var tcs = new TaskCompletionSource<SocketReceiveFromResult>();
             Connections.Add(remoteEndPoint,
                 new DemuxConnections(new DemuxConnection(tcs, buffer, false, false, cancellationToken)));
@@ -130,7 +129,7 @@ public class UDPDeMultiplexer
         while (true)
         {
             if (token.IsCancellationRequested) break;
-
+            // We might have timed out from the delayTask, but still are waiting for a new packet.
             if (udpClientReceiveTask == null || udpClientReceiveTask.IsCompleted)
             {
                 buffer = new byte[65527];
@@ -142,34 +141,51 @@ public class UDPDeMultiplexer
             if (delayTask == null || delayTask.IsCompleted) delayTask = Task.Delay(500, token);
 
             await Task.WhenAny(udpClientReceiveTask, delayTask);
-
+            // If there is a new packet to be recieved
             if (udpClientReceiveTask.IsCompletedSuccessfully)
             {
                 var udpClientReceive = await udpClientReceiveTask;
                 lock (mutex)
                 {
+                    // Check if we have a queue created
                     if (Connections.TryGetValue(udpClientReceive.RemoteEndPoint,
-                            out var connectionObj))
+                            out var demuxConnections))
                     {
 #if DEBUG
                         Console.WriteLine(
                             $"Delivered packet to {udpClientReceive.RemoteEndPoint} - {Convert.ToBase64String(buffer.ToArray().Take(10).ToArray())}");
 #endif
-                        if (connectionObj.Connections.TryDequeue(out var demuxConnection) == false ||
-                            demuxConnection.BufferDirty)
+                        // Check if we can dequeue an item
+                        bool shouldEnqueue = true;
+                        if (demuxConnections.Connections.TryDequeue(out var demuxConnection))
+                        {
+                            // This was already written to..
+                            if (demuxConnection.BufferDirty)
+                            {
+                                // Re-queue, this is already written to, and is awaiting a listener...
+                                demuxConnections.Connections.Enqueue(demuxConnection);
+                            }
+                            // If it wasn't written to yet..
+                            if (!demuxConnection.BufferDirty)
+                            {
+                                shouldEnqueue = false;
+                                demuxConnection.BufferDirty = true;
+                                buffer.CopyTo(demuxConnection.MemoryBuffer);
+                                demuxConnection.ReceiveFrom.SetResult(udpClientReceive);
+                                RemoveIfEmpty(udpClientReceive.RemoteEndPoint, demuxConnections);
+                            }
+
+                        }
+                        // If we couldn't dequeue an item or the dequeued item was dirty... we need to enqueue our own
+                        if (shouldEnqueue)
                         {
                             var tcs = new TaskCompletionSource<SocketReceiveFromResult>();
                             tcs.SetResult(udpClientReceive);
-                            connectionObj.Connections.Enqueue(new DemuxConnection(tcs,
+                            demuxConnections.Connections.Enqueue(new DemuxConnection(tcs,
                                 buffer, true, true));
                         }
-                        else
-                        {
-                            demuxConnection.BufferDirty = true;
-                            buffer.CopyTo(demuxConnection.MemoryBuffer);
-                            demuxConnection.ReceiveFrom.SetResult(udpClientReceive);
-                        }
                     }
+                    // This endpoint isn't registered yet, create a new queue..
                     else
                     {
 #if DEBUG
@@ -189,6 +205,7 @@ public class UDPDeMultiplexer
             if (delayTask.IsCompletedSuccessfully)
                 lock (mutex)
                 {
+                    // Go over each of the Connections, and each of the waiting packets, and check if the token has expired.
                     foreach (var keyPair in Connections.Keys.ToList())
                         if (Connections.TryGetValue(keyPair, out var demuxConnections))
                         {
@@ -209,8 +226,18 @@ public class UDPDeMultiplexer
                                 }
 
                             foreach (var connection in connections) demuxConnections.Connections.Enqueue(connection);
+                            RemoveIfEmpty(keyPair, demuxConnections);
                         }
                 }
+        }
+    }
+
+    private void RemoveIfEmpty(EndPoint endPoint, DemuxConnections demuxConnections)
+    {
+        lock (mutex)
+        {
+            if (demuxConnections.Connections.IsEmpty) Connections.Remove(endPoint);
+
         }
     }
 
