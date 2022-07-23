@@ -55,9 +55,9 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
 
         if (delayInit == false) Init();
     }
-
+    /// <inheritdoc />
     public int WaitingForResponse => m_demultiplexer.GetWaitingConnections();
-
+    /// <inheritdoc />
     public int Running => _running;
 
 
@@ -71,8 +71,10 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
         Init();
     }
 
-
+    /// <inheritdoc />
     public event IQueryConnectionPool.PoolError Error;
+
+    /// <inheritdoc />
 
     public event IQueryConnectionPool.PoolMessage Message;
 
