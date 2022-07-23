@@ -59,7 +59,9 @@ public class Program
         Console.WriteLine($"Server info: {info3}");
         Console.WriteLine($"Server info: {info4}");
         Console.WriteLine($"Server info: {info5}");
+        Console.WriteLine($"Pool Info: Running: {connPool.Running} - Waiting: {connPool.WaitingForResponse} ");
         // If not using `using` statement
+
         connPool.Dispose();
     }
 }
