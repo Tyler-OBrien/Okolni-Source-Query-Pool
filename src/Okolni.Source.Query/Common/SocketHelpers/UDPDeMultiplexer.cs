@@ -63,6 +63,8 @@ public class UDPDeMultiplexer
 {
     private readonly Dictionary<EndPoint, DemuxConnections> Connections = new();
 
+    private readonly object mutex = new();
+
 
     public ValueTask<SocketReceiveFromResult> AddListener(Memory<byte> buffer,
         SocketFlags socketFlags,
@@ -70,7 +72,7 @@ public class UDPDeMultiplexer
         Socket socket,
         CancellationToken cancellationToken = default)
     {
-        lock (Connections)
+        lock (mutex)
         {
             if (Connections.TryGetValue(remoteEndPoint, out var connections))
             {
@@ -87,34 +89,30 @@ public class UDPDeMultiplexer
                         return new ValueTask<SocketReceiveFromResult>(value.ReceiveFrom.Task);
                     }
 
-                    var tcs = new TaskCompletionSource<SocketReceiveFromResult>();
+                    var taskCompletionSourceQueue = new TaskCompletionSource<SocketReceiveFromResult>();
                     Connections.Add(remoteEndPoint,
-                        new DemuxConnections(new DemuxConnection(tcs, buffer, false, false, cancellationToken)));
+                        new DemuxConnections(new DemuxConnection(taskCompletionSourceQueue, buffer, false, false,
+                            cancellationToken)));
 #if DEBUG
                     Console.WriteLine($"New Listener: {remoteEndPoint} - {remoteEndPoint.Serialize()}");
 #endif
-                    return new ValueTask<SocketReceiveFromResult>(tcs.Task);
+                    return new ValueTask<SocketReceiveFromResult>(taskCompletionSourceQueue.Task);
                 }
-
-                {
-                    var tcs = new TaskCompletionSource<SocketReceiveFromResult>();
-                    connections.Connections.Enqueue(new DemuxConnection(tcs, buffer, false, false, cancellationToken));
+                var taskCompletionSource = new TaskCompletionSource<SocketReceiveFromResult>();
+                connections.Connections.Enqueue(new DemuxConnection(taskCompletionSource, buffer, false, false,
+                    cancellationToken));
 #if DEBUG
                     Console.WriteLine($"New Listener: {remoteEndPoint} - {remoteEndPoint.Serialize()}");
 #endif
-                    return new ValueTask<SocketReceiveFromResult>(tcs.Task);
-                }
+                return new ValueTask<SocketReceiveFromResult>(taskCompletionSource.Task);
             }
-
-            {
-                var tcs = new TaskCompletionSource<SocketReceiveFromResult>();
-                Connections.Add(remoteEndPoint,
-                    new DemuxConnections(new DemuxConnection(tcs, buffer, false, false, cancellationToken)));
+            var tcs = new TaskCompletionSource<SocketReceiveFromResult>();
+            Connections.Add(remoteEndPoint,
+                new DemuxConnections(new DemuxConnection(tcs, buffer, false, false, cancellationToken)));
 #if DEBUG
                 Console.WriteLine($"New Listener: {remoteEndPoint} - {remoteEndPoint.Serialize()}");
 #endif
-                return new ValueTask<SocketReceiveFromResult>(tcs.Task);
-            }
+            return new ValueTask<SocketReceiveFromResult>(tcs.Task);
         }
     }
 
@@ -147,7 +145,7 @@ public class UDPDeMultiplexer
             if (udpClientReceiveTask.IsCompletedSuccessfully)
             {
                 var udpClientReceive = await udpClientReceiveTask;
-                lock (Connections)
+                lock (mutex)
                 {
                     if (Connections.TryGetValue(udpClientReceive.RemoteEndPoint,
                             out var connectionObj))
@@ -188,29 +186,29 @@ public class UDPDeMultiplexer
 
             // It would be nice to have a better solution then this, recreating the queue each time.
             if (delayTask.IsCompletedSuccessfully)
-                lock (Connections)
+                lock (mutex)
                 {
-                    foreach (var keyPair in Connections.Keys)
-                    {
-                        var demuxConnections = Connections[keyPair];
-                        var connections = new List<DemuxConnection>();
-                        while (demuxConnections.Connections.TryDequeue(out var value))
-                            if (value.CancellationToken != CancellationToken.None &&
-                                value.CancellationToken.IsCancellationRequested)
-                            {
+                    foreach (var keyPair in Connections.Keys.ToList())
+                        if (Connections.TryGetValue(keyPair, out var demuxConnections))
+                        {
+                            var connections = new List<DemuxConnection>();
+                            while (demuxConnections.Connections.TryDequeue(out var value))
+                                if (value.CancellationToken != CancellationToken.None &&
+                                    value.CancellationToken.IsCancellationRequested)
+                                {
 #if DEBUG
                                 Console.WriteLine($"Timed out waiting packet from {keyPair}");
 #endif
-                                value.ReceiveFrom.TrySetException(
-                                    new OperationCanceledException("Operation timed out"));
-                            }
-                            else
-                            {
-                                connections.Add(value);
-                            }
+                                    value.ReceiveFrom.TrySetException(
+                                        new OperationCanceledException("Operation timed out"));
+                                }
+                                else
+                                {
+                                    connections.Add(value);
+                                }
 
-                        foreach (var connection in connections) demuxConnections.Connections.Enqueue(connection);
-                    }
+                            foreach (var connection in connections) demuxConnections.Connections.Enqueue(connection);
+                        }
                 }
         }
     }
