@@ -23,6 +23,7 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
     private readonly CancellationTokenSource m_cancellationTokenSource;
     private readonly UDPDeMultiplexer m_demultiplexer;
     private readonly Socket m_sharedSocket;
+    private int _running;
 
     private Task m_backgroundTask;
 
@@ -54,6 +55,10 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
 
         if (delayInit == false) Init();
     }
+
+    public int WaitingForResponse => m_demultiplexer.GetWaitingConnections();
+
+    public int Running => _running;
 
 
     /// <inheritdoc />
@@ -91,9 +96,17 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
     /// </summary>
     /// <returns>InfoResponse containing all Infos</returns>
     /// <exception cref="SourceQueryException"></exception>
-    public Task<InfoResponse> GetInfoAsync(IPEndPoint endpoint, int maxRetries = 10)
+    public async Task<InfoResponse> GetInfoAsync(IPEndPoint endpoint, int maxRetries = 10)
     {
-        return QueryHelper.GetInfoAsync(endpoint, m_socket, SendTimeout, ReceiveTimeout, maxRetries);
+        try
+        {
+            Interlocked.Increment(ref _running);
+            return await QueryHelper.GetInfoAsync(endpoint, m_socket, SendTimeout, ReceiveTimeout, maxRetries);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _running);
+        }
     }
 
 
@@ -113,9 +126,17 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
     /// </summary>
     /// <returns>PlayerResponse containing all players </returns>
     /// <exception cref="SourceQueryException"></exception>
-    public Task<PlayerResponse> GetPlayersAsync(IPEndPoint endpoint, int maxRetries = 10)
+    public async Task<PlayerResponse> GetPlayersAsync(IPEndPoint endpoint, int maxRetries = 10)
     {
-        return QueryHelper.GetPlayersAsync(endpoint, m_socket, SendTimeout, ReceiveTimeout, maxRetries);
+        try
+        {
+            Interlocked.Increment(ref _running);
+            return await QueryHelper.GetPlayersAsync(endpoint, m_socket, SendTimeout, ReceiveTimeout, maxRetries);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _running);
+        }
     }
 
 
@@ -135,9 +156,17 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
     /// </summary>
     /// <returns>RuleResponse containing all rules as a Dictionary</returns>
     /// <exception cref="SourceQueryException"></exception>
-    public Task<RuleResponse> GetRulesAsync(IPEndPoint endpoint, int maxRetries = 10)
+    public async Task<RuleResponse> GetRulesAsync(IPEndPoint endpoint, int maxRetries = 10)
     {
-        return QueryHelper.GetRulesAsync(endpoint, m_socket, SendTimeout, ReceiveTimeout, maxRetries);
+        try
+        {
+            Interlocked.Increment(ref _running);
+            return await QueryHelper.GetRulesAsync(endpoint, m_socket, SendTimeout, ReceiveTimeout, maxRetries);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _running);
+        }
     }
 
     public void Dispose()

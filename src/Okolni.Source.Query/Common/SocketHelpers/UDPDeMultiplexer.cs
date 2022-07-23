@@ -66,6 +66,7 @@ public class UDPDeMultiplexer
     private readonly object mutex = new();
 
 
+
     public ValueTask<SocketReceiveFromResult> AddListener(Memory<byte> buffer,
         SocketFlags socketFlags,
         EndPoint remoteEndPoint,
@@ -211,5 +212,10 @@ public class UDPDeMultiplexer
                         }
                 }
         }
+    }
+
+    public int GetWaitingConnections()
+    {
+        lock (mutex) { return Connections.Count; }
     }
 }
