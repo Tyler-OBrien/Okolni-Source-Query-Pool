@@ -83,7 +83,6 @@ public class UDPDeMultiplexer
                             $"Found instantly for {remoteEndPoint}...exiting early... {Convert.ToBase64String(value.MemoryBuffer.ToArray().Take(10).ToArray())}");
 #endif
 
-                        value.BufferDirty = true;
                         value.MemoryBuffer.CopyTo(buffer);
                         return new ValueTask<SocketReceiveFromResult>(value.ReceiveFrom.Task);
                     }
@@ -122,75 +121,94 @@ public class UDPDeMultiplexer
 
     public async Task Start(Socket socket, IPEndPoint endPoint, CancellationToken token)
     {
+        Task delayTask = null;
+        Task<SocketReceiveFromResult> udpClientReceiveTask = null;
+        Memory<byte> buffer = null;
+
         while (true)
         {
             if (token.IsCancellationRequested) break;
-            var newCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(token);
-            Memory<byte> buffer = new byte[65527];
-            var udpClientReceiveTask = socket.ReceiveFromAsync(buffer, SocketFlags.None, endPoint,
-                newCancellationTokenSource.Token).AsTask();
-            // Todo: Rework this to use timeout in the socket function (right now, I believe there is a short period between cancelling the Task and us stop checking for responses
-            if (await Task.WhenAny(udpClientReceiveTask, Task.Delay(500, newCancellationTokenSource.Token)) ==
-                udpClientReceiveTask)
 
-                newCancellationTokenSource.Cancel();
-            var udpClientReceive = udpClientReceiveTask.Result;
-            lock (Connections)
+            if (udpClientReceiveTask == null || udpClientReceiveTask.IsCompleted)
             {
-                if (Connections.TryGetValue(udpClientReceive.RemoteEndPoint,
-                        out var connectionObj))
+                buffer = new byte[65527];
+                udpClientReceiveTask = socket.ReceiveFromAsync(buffer, SocketFlags.None, endPoint,
+                    token).AsTask();
+            }
+
+
+            if (delayTask == null || delayTask.IsCompleted) delayTask = Task.Delay(500, token);
+
+            await Task.WhenAny(udpClientReceiveTask, delayTask);
+
+            if (udpClientReceiveTask.IsCompletedSuccessfully)
+            {
+                var udpClientReceive = await udpClientReceiveTask;
+                lock (Connections)
                 {
-#if DEBUG
-                    Console.WriteLine(
-                        $"Delivered packet to {udpClientReceive.RemoteEndPoint} - {Convert.ToBase64String(buffer.ToArray().Take(10).ToArray())}");
-#endif
-                    if (connectionObj.Connections.TryDequeue(out var demuxConnection) == false ||
-                        demuxConnection.BufferDirty)
+                    if (Connections.TryGetValue(udpClientReceive.RemoteEndPoint,
+                            out var connectionObj))
                     {
-                        var tcs = new TaskCompletionSource<SocketReceiveFromResult>();
-                        tcs.SetResult(udpClientReceive);
-                        connectionObj.Connections.Enqueue(new DemuxConnection(tcs,
-                            buffer, true, true));
+#if DEBUG
+                        Console.WriteLine(
+                            $"Delivered packet to {udpClientReceive.RemoteEndPoint} - {Convert.ToBase64String(buffer.ToArray().Take(10).ToArray())}");
+#endif
+                        if (connectionObj.Connections.TryDequeue(out var demuxConnection) == false ||
+                            demuxConnection.BufferDirty)
+                        {
+                            var tcs = new TaskCompletionSource<SocketReceiveFromResult>();
+                            tcs.SetResult(udpClientReceive);
+                            connectionObj.Connections.Enqueue(new DemuxConnection(tcs,
+                                buffer, true, true));
+                        }
+                        else
+                        {
+                            demuxConnection.BufferDirty = true;
+                            buffer.CopyTo(demuxConnection.MemoryBuffer);
+                            demuxConnection.ReceiveFrom.SetResult(udpClientReceive);
+                        }
                     }
                     else
                     {
-                        demuxConnection.BufferDirty = true;
-                        buffer.CopyTo(demuxConnection.MemoryBuffer);
-                        demuxConnection.ReceiveFrom.SetResult(udpClientReceive);
+#if DEBUG
+                        Console.WriteLine(
+                            $"Found nothing listening... on {udpClientReceive.RemoteEndPoint}, {Connections.Count} - {Convert.ToBase64String(buffer.ToArray().Take(10).ToArray())}");
+#endif
+                        var tcs = new TaskCompletionSource<SocketReceiveFromResult>();
+                        tcs.SetResult(udpClientReceive);
+                        Connections.Add(udpClientReceive.RemoteEndPoint,
+                            new DemuxConnections(new DemuxConnection(tcs, buffer, true,
+                                true)));
                     }
                 }
-                else
+            }
+
+            // It would be nice to have a better solution then this, recreating the queue each time.
+            if (delayTask.IsCompletedSuccessfully)
+                lock (Connections)
                 {
+                    foreach (var keyPair in Connections.Keys)
+                    {
+                        var demuxConnections = Connections[keyPair];
+                        var connections = new List<DemuxConnection>();
+                        while (demuxConnections.Connections.TryDequeue(out var value))
+                            if (value.CancellationToken != CancellationToken.None &&
+                                value.CancellationToken.IsCancellationRequested)
+                            {
 #if DEBUG
-                    Console.WriteLine(
-                        $"Found nothing listening... on {udpClientReceive.RemoteEndPoint}, {Connections.Count} - {Convert.ToBase64String(buffer.ToArray().Take(10).ToArray())}");
+                                Console.WriteLine($"Timed out waiting packet from {keyPair}");
 #endif
-                    var tcs = new TaskCompletionSource<SocketReceiveFromResult>();
-                    tcs.SetResult(udpClientReceive);
-                    Connections.Add(udpClientReceive.RemoteEndPoint,
-                        new DemuxConnections(new DemuxConnection(tcs, buffer, true,
-                            true)));
+                                value.ReceiveFrom.TrySetException(
+                                    new OperationCanceledException("Operation timed out"));
+                            }
+                            else
+                            {
+                                connections.Add(value);
+                            }
+
+                        foreach (var connection in connections) demuxConnections.Connections.Enqueue(connection);
+                    }
                 }
-            }
-
-
-            lock (Connections)
-            {
-                foreach (var keyPair in Connections.Keys)
-                {
-                    var demuxConnections = Connections[keyPair];
-                    var connections = new List<DemuxConnection>();
-                    while (demuxConnections.Connections.TryDequeue(out var value))
-                        if (value.CancellationToken != CancellationToken.None &&
-                            value.CancellationToken.IsCancellationRequested)
-                            value.ReceiveFrom.TrySetException(
-                                new OperationCanceledException("Operation timed out"));
-                        else
-                            connections.Add(value);
-
-                    foreach (var connection in connections) demuxConnections.Connections.Enqueue(connection);
-                }
-            }
         }
     }
 }
