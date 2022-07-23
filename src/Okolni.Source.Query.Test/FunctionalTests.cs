@@ -31,8 +31,8 @@ namespace Okolni.Source.Query.Test
 
             conn.Host = Host;
             conn.Port = Port;
-            conn.ReceiveTimeout = 500;
-            conn.SendTimeout = 500;
+            conn.ReceiveTimeout = 5000;
+            conn.SendTimeout = 5000;
 
             conn.Setup();
             var players = conn.GetPlayers();
@@ -45,8 +45,6 @@ namespace Okolni.Source.Query.Test
         }
 
         [TestMethod]
-        [DataRow("64.44.28.18", 28016)]
-
         [DataRow("45.235.99.86", 9702)]
         [DataRow("131.196.197.89", 9877)]
         [DataRow("176.57.181.146", 28915)]
@@ -63,8 +61,8 @@ namespace Okolni.Source.Query.Test
 
             conn.Host = Host;
             conn.Port = Port;
-            conn.ReceiveTimeout = 500;
-            conn.SendTimeout = 500;
+            conn.ReceiveTimeout = 5000;
+            conn.SendTimeout = 5000;
 
             conn.Setup();
             var players = await conn.GetPlayersAsync();
@@ -100,6 +98,19 @@ namespace Okolni.Source.Query.Test
             Assert.IsNotNull(info4);
             Assert.IsNotNull(info5);
             connPool.Dispose();
+        }
+
+        [TestMethod]
+        //192.0.2.0/24 is reserved documentation range
+        [DataRow("192.0.2.0", 27015)]
+        public async Task QueryTestPoolFailCondition(string Host, int Port)
+        {
+            using IQueryConnectionPool connPool = new QueryConnectionPool();
+            connPool.ReceiveTimeout = 5000;
+            connPool.SendTimeout = 5000;
+            // Shouldn't really hardcode IPs here, but 
+            await Assert.ThrowsExceptionAsync<SourceQueryException>(async () =>
+                await connPool.GetInfoAsync(new IPEndPoint(IPAddress.Parse(Host), Port)));
         }
     }
 }
