@@ -128,19 +128,23 @@ public class UDPDeMultiplexer
 
         while (true)
         {
-            if (token.IsCancellationRequested) break;
+            if (token.IsCancellationRequested)
+            {
+                break;
+            }
             // We might have timed out from the delayTask, but still are waiting for a new packet.
             if (udpClientReceiveTask == null || udpClientReceiveTask.IsCompleted)
             {
                 buffer = new byte[65527];
                 udpClientReceiveTask = socket.ReceiveFromAsync(buffer, SocketFlags.None, endPoint,
-                    token).AsTask();
+                    token).AsTask().HandleOperationCancelled();
             }
 
 
-            if (delayTask == null || delayTask.IsCompleted) delayTask = Task.Delay(500, token);
+            if (delayTask == null || delayTask.IsCompleted) delayTask = Task.Delay(500, token).HandleOperationCancelled();
 
             await Task.WhenAny(udpClientReceiveTask, delayTask);
+
             // If there is a new packet to be recieved
             if (udpClientReceiveTask.IsCompletedSuccessfully)
             {

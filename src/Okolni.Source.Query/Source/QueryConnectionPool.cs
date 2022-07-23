@@ -200,7 +200,7 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
                         m_cancellationTokenSource.Token).ContinueWith(t =>
                         {
                             // If there's nothing listening, bubble up
-                            if (Error == null)
+                            if (Error == null && t.Exception?.InnerException is not OperationCanceledException)
                                 throw new SourceQueryException(
                                     "Unexpected issue with background service for QueryConnectionPool",
                                     t.Exception);
