@@ -58,7 +58,6 @@ namespace Okolni.Source.Query.Test
         public async Task QueryTestASync(string Host, int Port)
         {
             using IQueryConnection conn = new QueryConnection();
-
             conn.Host = Host;
             conn.Port = Port;
             conn.ReceiveTimeout = 5000;
@@ -77,8 +76,10 @@ namespace Okolni.Source.Query.Test
         public async Task QueryTestPool()
         {
             using IQueryConnectionPool connPool = new QueryConnectionPool();
+            connPool.Error += exception => throw exception;
             connPool.ReceiveTimeout = 5000;
             connPool.SendTimeout = 5000;
+            connPool.Setup();
             var serverEndpoint1 = new IPEndPoint(IPAddress.Parse("185.239.211.62"), 39215);
             var serverEndpoint2 = new IPEndPoint(IPAddress.Parse("176.57.181.146"), 28915);
             var serverEndpoint3 = new IPEndPoint(IPAddress.Parse("23.109.144.148"), 28215);
@@ -106,9 +107,11 @@ namespace Okolni.Source.Query.Test
         public async Task QueryTestPoolFailCondition(string Host, int Port)
         {
             using IQueryConnectionPool connPool = new QueryConnectionPool();
+            connPool.Error += exception => throw exception; 
             connPool.ReceiveTimeout = 5000;
             connPool.SendTimeout = 5000;
-            // Shouldn't really hardcode IPs here, but 
+            connPool.Setup();
+
             await Assert.ThrowsExceptionAsync<SourceQueryException>(async () =>
                 await connPool.GetInfoAsync(new IPEndPoint(IPAddress.Parse(Host), Port)));
         }

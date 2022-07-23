@@ -10,6 +10,7 @@ using Okolni.Source.Query.Common.SocketHelpers;
 using Okolni.Source.Query.Responses;
 
 namespace Okolni.Source.Query.Source;
+
 /*
  * This is really work in progress
  * The basic idea was just to use a single socket instead of potentially thousands (depending on how many queries you are making)... Since we are just sending out a few UDP Packets and getting a few back, we don't really need a dedicated socket or anything, really short life time & short packet lengths.
@@ -19,22 +20,19 @@ namespace Okolni.Source.Query.Source;
  */
 public class QueryConnectionPool : IQueryConnectionPool, IDisposable
 {
+    private readonly CancellationTokenSource m_cancellationTokenSource;
     private readonly UDPDeMultiplexer m_demultiplexer;
     private readonly Socket m_sharedSocket;
-    private readonly DemuxSocket m_socket;
-    private readonly CancellationTokenSource m_cancellationTokenSource;
 
     private Task m_backgroundTask;
 
     private IPEndPoint m_endPoint;
 
+    private bool m_init;
+    private DemuxSocket m_socket;
 
 
-    public event IQueryConnectionPool.PoolError Error;
-
-    public event IQueryConnectionPool.PoolMessage Message;
-
-    public QueryConnectionPool()
+    public QueryConnectionPool(bool delayInit = true)
     {
         m_cancellationTokenSource = new CancellationTokenSource();
         // This only supports IPv4, but right now, so does Steam.
@@ -45,47 +43,36 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
             //https://stackoverflow.com/questions/7201862/an-existing-connection-was-forcibly-closed-by-the-remote-host
             // Windows only issue, the UDP socket is also receiving ICMP messages and throwing exceptions when they are received. Some hosts may respond with ICMP Host unreachable if no listener is on that port.
             // Microsoft Article 263823 
-            uint IOC_IN = 0x80000000;
+            var IOC_IN = 0x80000000;
             uint IOC_VENDOR = 0x18000000;
-            uint SIO_UDP_CONNRESET = IOC_IN | IOC_VENDOR | 12;
-            m_sharedSocket.IOControl((int)SIO_UDP_CONNRESET, new byte[] { Convert.ToByte(false) }, null);
+            var SIO_UDP_CONNRESET = IOC_IN | IOC_VENDOR | 12;
+            m_sharedSocket.IOControl((int)SIO_UDP_CONNRESET, new[] { Convert.ToByte(false) }, null);
         }
-        m_endPoint = new IPEndPoint(IPAddress.Any, 0);
-        //m_sharedSocket.Bind(m_endPoint);
-        SendTimeout = 1000;
-        ReceiveTimeout = 1000;
+
         m_demultiplexer = new UDPDeMultiplexer();
-        m_socket = new DemuxSocket(m_sharedSocket, m_demultiplexer, EnsureBackgroundTaskIsRunning);
+
+
+        if (delayInit == false) Init();
     }
+
+
+    /// <inheritdoc />
+    public void Setup()
+    {
+        if (m_init)
+            throw new InvalidOperationException(
+                "The socket, background worker and related resources have already been created. If you want to use this, pass true in the constructor for delayInit");
+
+        Init();
+    }
+
+
+    public event IQueryConnectionPool.PoolError Error;
+
+    public event IQueryConnectionPool.PoolMessage Message;
 
     public int SendTimeout { get; set; }
     public int ReceiveTimeout { get; set; }
-
-
-    internal void EnsureBackgroundTaskIsRunning()
-    {
-        if (m_backgroundTask == null || m_backgroundTask.IsCompleted || m_backgroundTask.IsCanceled ||
-            m_backgroundTask.IsFaulted)
-        {
-            m_backgroundTask = m_demultiplexer.Start(m_sharedSocket, m_endPoint, m_cancellationTokenSource.Token)
-                .ContinueWith(t =>
-                    {
-                        // If there's nothing listening, bubble up
-                        if (Error == null)
-                        {
-                            throw new SourceQueryException(
-                                "Unexpected issue with background service for QueryConnectionPool", t.Exception);
-                        }
-
-                        Error?.Invoke(t.Exception);
-                    },
-                    TaskContinuationOptions.OnlyOnFaulted)
-                .ContinueWith(t => { Message?.Invoke($"Worker exited safely {t.Status}"); },
-                    TaskContinuationOptions.OnlyOnRanToCompletion);
-            Message?.Invoke($"Starting Background worker for UDP Socket {m_endPoint}");
-        }
-    }
-
 
 
     /// <summary>
@@ -158,5 +145,44 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
         if (!m_cancellationTokenSource.IsCancellationRequested)
             m_cancellationTokenSource?.Cancel();
         m_sharedSocket?.Dispose();
+    }
+
+
+    private void Init()
+    {
+        m_endPoint = new IPEndPoint(IPAddress.Any, 0);
+        m_sharedSocket.Bind(m_endPoint);
+        SendTimeout = 1000;
+        ReceiveTimeout = 1000;
+        m_socket = new DemuxSocket(m_sharedSocket, m_demultiplexer);
+        RunWorker();
+        m_init = true;
+    }
+
+
+    internal void RunWorker()
+    {
+        m_backgroundTask = Task.Factory.StartNew(
+            () =>
+            {
+                m_demultiplexer.Start(m_sharedSocket, m_endPoint,
+                        m_cancellationTokenSource.Token).ContinueWith(t =>
+                        {
+                            // If there's nothing listening, bubble up
+                            if (Error == null)
+                                throw new SourceQueryException(
+                                    "Unexpected issue with background service for QueryConnectionPool",
+                                    t.Exception);
+
+                            Error?.Invoke(t.Exception);
+                        },
+                        TaskContinuationOptions.OnlyOnFaulted)
+                    .ContinueWith(t => { Message?.Invoke($"Worker exited safely {t.Status}"); },
+                        TaskContinuationOptions.OnlyOnRanToCompletion);
+                return m_backgroundTask;
+            },
+            m_cancellationTokenSource.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
+        Message?.Invoke($"Starting Background worker for UDP Socket {m_sharedSocket.LocalEndPoint}");
     }
 }

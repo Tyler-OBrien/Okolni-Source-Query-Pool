@@ -30,7 +30,7 @@ public class Program
         
 
 
-        using IQueryConnectionPool connPool = new QueryConnectionPool();
+        using IQueryConnectionPool connPool = new QueryConnectionPool(delayInit: true);
         connPool.Message += msg =>
         {
             Console.WriteLine("Pool Responded with Message:" + msg);
@@ -38,6 +38,7 @@ public class Program
         connPool.Error += exception => throw exception;
         connPool.ReceiveTimeout = 500;
         connPool.SendTimeout = 500;
+        connPool.Setup();
         var serverEndpoint1 = new IPEndPoint(IPAddress.Parse(Host), Port);
         var serverEndpoint2 = new IPEndPoint(IPAddress.Parse("176.57.181.146"), 28915);
         var serverEndpoint3 = new IPEndPoint(IPAddress.Parse("23.109.144.148"), 28215);

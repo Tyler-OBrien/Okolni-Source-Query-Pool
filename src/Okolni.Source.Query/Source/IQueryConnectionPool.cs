@@ -23,10 +23,26 @@ namespace Okolni.Source.Query.Source
 
 
         public delegate void PoolError(Exception ex);
+        /// <summary>
+        /// Event emitted on any errors the background worker hits. Background worker used for receiving responses from queries.
+        /// </summary>
         public event PoolError Error;
 
         public delegate void PoolMessage(string msg);
+        /// <summary>
+        /// Event emitted for any messages from the pool about status.
+        /// </summary>
         public event PoolMessage Message;
+
+
+
+        /// <summary>
+        /// Sets up the socket and background worker for the pool. Only call if you delayed init in the constructor of the pool, otherwise will throw error.
+        /// </summary>
+        /// <exception cref="SocketException"></exception>
+        /// <exception cref="TimeoutException"></exception>
+        /// <exception cref="InvalidOperationException"></exception>
+        void Setup();
 
 
 

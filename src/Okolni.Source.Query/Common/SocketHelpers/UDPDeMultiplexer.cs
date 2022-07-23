@@ -121,6 +121,9 @@ public class UDPDeMultiplexer
 
     public async Task Start(Socket socket, IPEndPoint endPoint, CancellationToken token)
     {
+#if DEBUG
+        Console.WriteLine($"Starting up Demux Worker - {Thread.CurrentThread.ManagedThreadId}");
+#endif
         Task delayTask = null;
         Task<SocketReceiveFromResult> udpClientReceiveTask = null;
         Memory<byte> buffer = null;
