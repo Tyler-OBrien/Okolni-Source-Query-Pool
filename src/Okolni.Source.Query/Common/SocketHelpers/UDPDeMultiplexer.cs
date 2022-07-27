@@ -75,6 +75,12 @@ public class UDPDeMultiplexer
     {
         lock (mutex)
         {
+            if (remoteEndPoint is IPEndPoint ipEndpoint)
+            {
+                ipEndpoint.Address = ipEndpoint.Address.MapToIPv6();
+            }
+
+
             if (Connections.TryGetValue(remoteEndPoint, out var demuxConnections))
             {
                 if (demuxConnections.Connections.TryDequeue(out var value))

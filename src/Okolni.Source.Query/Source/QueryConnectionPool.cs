@@ -37,7 +37,7 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
     {
         m_cancellationTokenSource = new CancellationTokenSource();
         // This only supports IPv4, but right now, so does Steam.
-        m_sharedSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        m_sharedSocket = new Socket(SocketType.Dgram, ProtocolType.Udp);
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             //https://stackoverflow.com/questions/38191968/c-sharp-udp-an-existing-connection-was-forcibly-closed-by-the-remote-host
