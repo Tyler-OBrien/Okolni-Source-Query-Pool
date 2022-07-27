@@ -49,6 +49,12 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
             uint IOC_VENDOR = 0x18000000;
             var SIO_UDP_CONNRESET = IOC_IN | IOC_VENDOR | 12;
             m_sharedSocket.IOControl((int)SIO_UDP_CONNRESET, new[] { Convert.ToByte(false) }, null);
+            const int SIO_UDP_CONNRESET_2 = -1744830452;
+            m_sharedSocket.IOControl(
+                (IOControlCode)SIO_UDP_CONNRESET_2,
+                new byte[] { 0, 0, 0, 0 },
+                null
+            );
         }
 
         m_demultiplexer = new UDPDeMultiplexer();
