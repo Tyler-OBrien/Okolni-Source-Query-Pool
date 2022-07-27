@@ -18,7 +18,6 @@ namespace Okolni.Source.Query.Test
         [DataRow("131.196.197.89", 9877)]
         [DataRow("176.57.181.146", 28915)]
         [DataRow("23.109.144.148", 28215)]
-        [DataRow("147.135.30.212", 5746)]
         [DataRow("176.57.140.69", 28915)]
         [DataRow("185.239.211.116", 32915)]
         [DataRow("176.57.173.121", 31715)]
@@ -49,7 +48,6 @@ namespace Okolni.Source.Query.Test
         [DataRow("131.196.197.89", 9877)]
         [DataRow("176.57.181.146", 28915)]
         [DataRow("23.109.144.148", 28215)]
-        [DataRow("147.135.30.212", 5746)]
         [DataRow("176.57.140.69", 28915)]
         [DataRow("185.239.211.116", 32915)]
         [DataRow("176.57.173.121", 31715)]
@@ -83,7 +81,7 @@ namespace Okolni.Source.Query.Test
             var serverEndpoint1 = new IPEndPoint(IPAddress.Parse("185.239.211.62"), 39215);
             var serverEndpoint2 = new IPEndPoint(IPAddress.Parse("176.57.181.146"), 28915);
             var serverEndpoint3 = new IPEndPoint(IPAddress.Parse("23.109.144.148"), 28215);
-            var serverEndpoint4 = new IPEndPoint(IPAddress.Parse("147.135.30.212"), 5746);
+            var serverEndpoint4 = new IPEndPoint(IPAddress.Parse("193.164.16.98"), 27822);
             var serverEndpoint5 = new IPEndPoint(IPAddress.Parse("176.57.140.69"), 28915);
 
             var infoTask1 = connPool.GetInfoAsync(serverEndpoint1);

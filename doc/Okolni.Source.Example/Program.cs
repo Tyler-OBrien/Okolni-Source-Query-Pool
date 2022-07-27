@@ -42,7 +42,7 @@ public class Program
         var serverEndpoint1 = new IPEndPoint(IPAddress.Parse(Host), Port);
         var serverEndpoint2 = new IPEndPoint(IPAddress.Parse("176.57.181.146"), 28915);
         var serverEndpoint3 = new IPEndPoint(IPAddress.Parse("23.109.144.148"), 28215);
-        var serverEndpoint4 = new IPEndPoint(IPAddress.Parse("147.135.30.212"), 5746);
+        var serverEndpoint4 = new IPEndPoint(IPAddress.Parse("193.164.16.98"), 27822);
         var serverEndpoint5 = new IPEndPoint(IPAddress.Parse("176.57.140.69"), 28915);
 
 
