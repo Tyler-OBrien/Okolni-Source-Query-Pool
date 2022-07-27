@@ -38,6 +38,7 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
         m_cancellationTokenSource = new CancellationTokenSource();
         // This only supports IPv4, but right now, so does Steam.
         m_sharedSocket = new Socket(SocketType.Dgram, ProtocolType.Udp);
+        m_sharedSocket.Ttl = 255;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             //https://stackoverflow.com/questions/38191968/c-sharp-udp-an-existing-connection-was-forcibly-closed-by-the-remote-host
@@ -51,7 +52,6 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
         }
 
         m_demultiplexer = new UDPDeMultiplexer();
-
 
         if (delayInit == false) Init();
     }

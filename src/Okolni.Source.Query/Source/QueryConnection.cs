@@ -48,6 +48,7 @@ public class QueryConnection : IQueryConnection, IDisposable
         m_socket = new Socket(SocketType.Dgram, ProtocolType.Udp);
         m_socketWrapper = new SocketWrapper(m_socket);
         m_endPoint = new IPEndPoint(IPAddress.Parse(Host), Port);
+        m_socket.Ttl = 255;
     }
 
     /// <inheritdoc />
@@ -69,6 +70,8 @@ public class QueryConnection : IQueryConnection, IDisposable
         // Note: The timeout does nothing now because SendTimeout and Receive timeout only affect the sync Receive/Send methods..
         m_socket.SendTimeout = timeoutMiliSec;
         m_socket.ReceiveTimeout = timeoutMiliSec;
+        m_socket.Ttl = 255;
+
     }
 
     /// <inheritdoc />
