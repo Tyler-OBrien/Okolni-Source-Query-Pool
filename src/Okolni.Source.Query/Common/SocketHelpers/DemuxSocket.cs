@@ -66,6 +66,6 @@ public class DemuxSocket : ISocket
         CancellationToken cancellationToken = default)
     {
         m_receiveCallback?.Invoke();
-        return m_udpDeMultiplexer.AddListener(buffer, socketFlags, remoteEndPoint, m_socket, cancellationToken);
+        return m_udpDeMultiplexer.ReceiveAsync(buffer, socketFlags, remoteEndPoint, m_socket, cancellationToken);
     }
 }
