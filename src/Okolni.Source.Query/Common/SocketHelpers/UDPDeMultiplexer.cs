@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -52,81 +51,78 @@ public struct DemuxConnections
     }
 
 
-    public ConcurrentQueue<DemuxConnection> Connections = new();
+    public Queue<DemuxConnection> Connections = new();
 }
 
 public class UDPDeMultiplexer
 {
-    private readonly SemaphoreSlim _semaphoreSlim = new(1, 1);
     private readonly Dictionary<EndPoint, DemuxConnections> Connections = new();
+
+    private readonly object mutex = new();
 
     private int _waitingConnections;
 
 
-    public async ValueTask<SocketReceiveFromResult> ReceiveAsync(Memory<byte> buffer,
+    public ValueTask<SocketReceiveFromResult> ReceiveAsync(Memory<byte> buffer,
         SocketFlags socketFlags,
         EndPoint remoteEndPoint,
         Socket socket,
         CancellationToken cancellationToken = default)
     {
-        var alreadyFree = false;
-        try
+        lock (mutex)
         {
-            await _semaphoreSlim.WaitAsync(cancellationToken);
-            if (remoteEndPoint is IPEndPoint ipEndpoint) ipEndpoint.Address = ipEndpoint.Address.MapToIPv6();
+            return InternalReceive(buffer, remoteEndPoint, cancellationToken);
+        }
+    }
+
+    internal ValueTask<SocketReceiveFromResult> InternalReceive(Memory<byte> buffer,
+        EndPoint remoteEndPoint,
+        CancellationToken cancellationToken)
+    {
+        if (remoteEndPoint is IPEndPoint ipEndpoint) ipEndpoint.Address = ipEndpoint.Address.MapToIPv6();
 
 
-            if (Connections.TryGetValue(remoteEndPoint, out var demuxConnections))
+        if (Connections.TryGetValue(remoteEndPoint, out var demuxConnections))
+        {
+            if (TryDequeue(demuxConnections, out var value))
             {
-                if (TryDequeue(demuxConnections.Connections, out var value))
+                // Dirty, meaning it has content for us..
+                if (value.BufferDirty)
                 {
-                    // Dirty, meaning it has content for us..
-                    if (value.BufferDirty)
-                    {
 #if DEBUG
-                        Console.WriteLine(
-                            $"Found instantly for {remoteEndPoint}...exiting early... {Convert.ToBase64String(value.MemoryBuffer.ToArray().Take(10).ToArray())}");
+                    Console.WriteLine(
+                        $"Found instantly for {remoteEndPoint}...exiting early... {Convert.ToBase64String(value.MemoryBuffer.ToArray().Take(10).ToArray())}");
 #endif
-                        RemoveIfEmpty(remoteEndPoint, demuxConnections);
-                        value.MemoryBuffer.CopyTo(buffer);
-                        return await value.ReceiveFrom.Task;
-                    }
-                    else
-                    {
-                        // If it isn't dirty, it's waiting just like us, and we should add it back.
-                        Enqueue(demuxConnections.Connections, value);
-                    }
+                    RemoveIfEmpty(remoteEndPoint, demuxConnections);
+                    value.MemoryBuffer.CopyTo(buffer);
+                    return new ValueTask<SocketReceiveFromResult>(value.ReceiveFrom.Task);
                 }
 
-                // If we couldn't get anything from the queue, or we could but it wasn't dirty, we should enqueue our own item.
-                var taskCompletionSource = new TaskCompletionSource<SocketReceiveFromResult>();
-                Enqueue(demuxConnections.Connections, new DemuxConnection(taskCompletionSource, buffer, false, false,
-                    cancellationToken));
-#if DEBUG
-                Console.WriteLine($"New Listener: {remoteEndPoint} - {remoteEndPoint.Serialize()}");
-#endif
-                _semaphoreSlim.Release();
-                alreadyFree = true;
-                return await taskCompletionSource.Task;
+                // If it isn't dirty, it's waiting just like us, and we should add it back.
+                Enqueue(demuxConnections, value);
             }
 
-            // If there's no queue yet, we should create it and add it.
-            var tcs = new TaskCompletionSource<SocketReceiveFromResult>();
-            var newDemuxConnections = new DemuxConnections();
-            Enqueue(newDemuxConnections.Connections, new DemuxConnection(tcs, buffer, false, false, cancellationToken));
-            Connections.Add(remoteEndPoint, newDemuxConnections);
+            // If we couldn't get anything from the queue, or we could but it wasn't dirty, we should enqueue our own item.
+            var taskCompletionSource = new TaskCompletionSource<SocketReceiveFromResult>();
+            Enqueue(demuxConnections, new DemuxConnection(taskCompletionSource, buffer, false, false,
+                cancellationToken));
 #if DEBUG
             Console.WriteLine($"New Listener: {remoteEndPoint} - {remoteEndPoint.Serialize()}");
 #endif
-            _semaphoreSlim.Release();
-            alreadyFree = true;
-            return await tcs.Task;
+
+            return new ValueTask<SocketReceiveFromResult>(taskCompletionSource.Task);
         }
-        finally
-        {
-            if (!alreadyFree)
-                _semaphoreSlim.Release();
-        }
+
+        // If there's no queue yet, we should create it and add it.
+        var tcs = new TaskCompletionSource<SocketReceiveFromResult>();
+        var newDemuxConnections = new DemuxConnections();
+        Enqueue(newDemuxConnections, new DemuxConnection(tcs, buffer, false, false, cancellationToken));
+        Connections.Add(remoteEndPoint, newDemuxConnections);
+#if DEBUG
+        Console.WriteLine($"New Listener: {remoteEndPoint} - {remoteEndPoint.Serialize()}");
+#endif
+
+        return new ValueTask<SocketReceiveFromResult>(tcs.Task);
     }
 
 
@@ -160,9 +156,8 @@ public class UDPDeMultiplexer
             if (udpClientReceiveTask.IsCompletedSuccessfully)
             {
                 var udpClientReceive = await udpClientReceiveTask;
-                try
+                lock (mutex)
                 {
-                    await _semaphoreSlim.WaitAsync(CancellationToken.None);
                     // Check if we have a queue created
                     if (Connections.TryGetValue(udpClientReceive.RemoteEndPoint,
                             out var demuxConnections))
@@ -173,12 +168,12 @@ public class UDPDeMultiplexer
 #endif
                         // Check if we can dequeue an item
                         var shouldEnqueue = true;
-                        if (TryDequeue(demuxConnections.Connections, out var demuxConnection))
+                        if (TryDequeue(demuxConnections, out var demuxConnection))
                         {
                             // This was already written to..
                             if (demuxConnection.BufferDirty)
                                 // Re-queue, this is already written to, and is awaiting a listener...
-                                Enqueue(demuxConnections.Connections, demuxConnection);
+                                Enqueue(demuxConnections, demuxConnection);
 
                             // If it wasn't written to yet..
                             if (!demuxConnection.BufferDirty)
@@ -196,7 +191,7 @@ public class UDPDeMultiplexer
                         {
                             var tcs = new TaskCompletionSource<SocketReceiveFromResult>();
                             tcs.SetResult(udpClientReceive);
-                            Enqueue(demuxConnections.Connections, new DemuxConnection(tcs,
+                            Enqueue(demuxConnections, new DemuxConnection(tcs,
                                 buffer, true, true));
                         }
                     }
@@ -211,53 +206,56 @@ public class UDPDeMultiplexer
                         tcs.SetResult(udpClientReceive);
 
                         var newDemuxConnections = new DemuxConnections();
-                        Enqueue(newDemuxConnections.Connections, new DemuxConnection(tcs, buffer, true, true));
+                        Enqueue(newDemuxConnections, new DemuxConnection(tcs, buffer, true, true));
                         Connections.Add(udpClientReceive.RemoteEndPoint, newDemuxConnections);
                     }
-                }
-                finally
-                {
-                    _semaphoreSlim.Release();
                 }
             }
 
             // It would be nice to have a better solution then this, recreating the queue each time.
-            if (delayTask.IsCompletedSuccessfully)
-                foreach (var keyPair in Connections.Keys.ToList())
-                    if (Connections.TryGetValue(keyPair, out var demuxConnections))
-                    {
-                        var connections = new List<DemuxConnection>();
-                        while (TryDequeue(demuxConnections.Connections, out var value))
-                            if (value.CancellationToken != CancellationToken.None &&
-                                value.CancellationToken.IsCancellationRequested)
-                            {
-#if DEBUG
-                                Console.WriteLine($"Timed out waiting packet from {keyPair}");
-#endif
-                                value.ReceiveFrom.TrySetException(
-                                    new OperationCanceledException("Operation timed out"));
-                            }
-                            else
-                            {
-                                connections.Add(value);
-                            }
 
-                        foreach (var connection in connections) Enqueue(demuxConnections.Connections, connection);
-                        RemoveIfEmpty(keyPair, demuxConnections);
-                    }
+            if (delayTask.IsCompletedSuccessfully)
+                lock (mutex)
+                {
+                    if (Connections.Keys.Any())
+                        foreach (var keyPair in Connections.Keys.ToList())
+                            if (Connections.TryGetValue(keyPair, out var demuxConnections))
+                            {
+                                var connections = new List<DemuxConnection>();
+
+                                while (TryDequeue(demuxConnections, out var value))
+                                    if (value.CancellationToken != CancellationToken.None &&
+                                        value.CancellationToken.IsCancellationRequested)
+                                    {
+#if DEBUG
+                                        Console.WriteLine($"Timed out waiting packet from {keyPair}");
+#endif
+                                        value.ReceiveFrom.TrySetException(
+                                            new OperationCanceledException("Operation timed out"));
+                                    }
+                                    else
+                                    {
+                                        connections.Add(value);
+                                    }
+
+                                foreach (var connection in connections)
+                                    Enqueue(demuxConnections, connection);
+                                RemoveIfEmpty(keyPair, demuxConnections);
+                            }
+                }
         }
     }
 
     // These should be inside of the semaphore
-    private void Enqueue(ConcurrentQueue<DemuxConnection> queue, DemuxConnection item)
+    private void Enqueue(DemuxConnections queue, DemuxConnection item)
     {
-        queue.Enqueue(item);
+        queue.Connections.Enqueue(item);
         Interlocked.Increment(ref _waitingConnections);
     }
 
-    private bool TryDequeue(ConcurrentQueue<DemuxConnection> queue, out DemuxConnection item)
+    private bool TryDequeue(DemuxConnections queue, out DemuxConnection item)
     {
-        if (queue.TryDequeue(out item))
+        if (queue.Connections.TryDequeue(out item))
         {
             Interlocked.Decrement(ref _waitingConnections);
             return true;
@@ -268,7 +266,7 @@ public class UDPDeMultiplexer
 
     private void RemoveIfEmpty(EndPoint endPoint, DemuxConnections demuxConnections)
     {
-        if (demuxConnections.Connections.IsEmpty) Connections.Remove(endPoint);
+        if (demuxConnections.Connections.Count == 0) Connections.Remove(endPoint);
     }
 
     public int GetWaitingConnections()
