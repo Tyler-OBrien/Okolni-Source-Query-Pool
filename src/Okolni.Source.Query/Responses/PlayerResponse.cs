@@ -12,6 +12,11 @@ namespace Okolni.Source.Query.Responses
         public byte Header { get; set; }
 
         /// <summary>
+        /// Amount of retries it took to get the result
+        /// </summary>
+        public int Retries { get; set; }
+
+        /// <summary>
         /// List of Players on the server
         /// </summary>
         public List<Player> Players { get; set; }

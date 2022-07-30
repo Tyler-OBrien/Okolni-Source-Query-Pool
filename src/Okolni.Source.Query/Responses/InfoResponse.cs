@@ -14,6 +14,11 @@ namespace Okolni.Source.Query.Responses
         public byte Header { get; set; }
 
         /// <summary>
+        /// Amount of retries it took to get the result
+        /// </summary>
+        public int Retries { get; set; }
+
+        /// <summary>
         /// Protocol version used by the server.
         /// </summary>
         public byte Protocol { get; set; }

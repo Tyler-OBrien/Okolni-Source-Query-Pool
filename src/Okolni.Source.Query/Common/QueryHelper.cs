@@ -126,11 +126,10 @@ internal static class QueryHelper
     {
         try
         {
-            var requestData = await RequestDataFromServer(Constants.A2S_INFO_REQUEST, endPoint, socket, maxRetries,
+            (var byteReader, var header, int retriesUsed) = await RequestDataFromServer(Constants.A2S_INFO_REQUEST, endPoint, socket, maxRetries,
                 sendTimeout, receiveTimeout);
 
-            var byteReader = requestData.reader;
-            var header = requestData.header;
+           
 
             if (header != Constants.A2S_INFO_RESPONSE)
                 throw new ArgumentException("The fetched Response is no A2S_INFO Response.");
@@ -138,6 +137,7 @@ internal static class QueryHelper
             var res = new InfoResponse()
             {
                 Header = header,
+                Retries = retriesUsed,
                 Protocol = byteReader.GetByte(),
                 Name = byteReader.GetString(),
                 Map = byteReader.GetString(),
@@ -199,16 +199,15 @@ internal static class QueryHelper
     {
         try
         {
-            var requestData = await RequestDataFromServer(Constants.A2S_PLAYER_CHALLENGE_REQUEST, endPoint, socket,
+            (var byteReader, var header, int retriesUsed) = await RequestDataFromServer(Constants.A2S_PLAYER_CHALLENGE_REQUEST, endPoint, socket,
                 maxRetries, sendTimeout, ReceiveTimeout, true);
 
-            var byteReader = requestData.reader;
-            var header = requestData.header;
+         
 
             if (!header.Equals(Constants.A2S_PLAYER_RESPONSE))
                 throw new ArgumentException("Response was no player response.");
 
-            var playerResponse = new PlayerResponse { Header = header, Players = new List<Player>() };
+            var playerResponse = new PlayerResponse { Header = header, Retries = retriesUsed, Players = new List<Player>() };
             int playercount = byteReader.GetByte();
             for (var i = 1; i <= playercount; i++)
                 playerResponse.Players.Add(new Player
@@ -249,16 +248,14 @@ internal static class QueryHelper
     {
         try
         {
-            var requestData = await RequestDataFromServer(Constants.A2S_RULES_CHALLENGE_REQUEST, endPoint, socket,
+            (var byteReader, var header, int retriesUsed) = await RequestDataFromServer(Constants.A2S_RULES_CHALLENGE_REQUEST, endPoint, socket,
                 maxRetries, sendTimeout, receiveTimeout, true);
 
-            var byteReader = requestData.reader;
-            var header = requestData.header;
 
             if (!header.Equals(Constants.A2S_RULES_RESPONSE))
                 throw new ArgumentException("Response was no rules response.");
 
-            var ruleResponse = new RuleResponse { Header = header, Rules = new Dictionary<string, string>() };
+            var ruleResponse = new RuleResponse { Header = header, Retries = retriesUsed, Rules = new Dictionary<string, string>() };
             int rulecount = byteReader.GetShort();
             for (var i = 1; i <= rulecount; i++) ruleResponse.Rules.Add(byteReader.GetString(), byteReader.GetString());
 
@@ -271,7 +268,7 @@ internal static class QueryHelper
     }
 
     // This could do with some clean up
-    public static async Task<(IByteReader reader, byte header)> RequestDataFromServer(byte[] request,
+    public static async Task<(IByteReader reader, byte header, int retriesUsed)> RequestDataFromServer(byte[] request,
         IPEndPoint endPoint, ISocket socket, int maxRetries, int sendTimeout, int ReceiveTimeout,
         bool replaceLastBytesInRequest = false)
     {
@@ -305,8 +302,8 @@ internal static class QueryHelper
                         var retryResponse = await FetchResponse(endPoint, socket, ReceiveTimeout);
                         byteReader = retryResponse.GetByteReader();
                         header = byteReader.GetByte();
-
-                        retries++;
+                        if (header == Constants.CHALLENGE_RESPONSE)
+                            retries++;
                     } while (header == Constants.CHALLENGE_RESPONSE && retries < maxRetries);
 
                     if (header == Constants.CHALLENGE_RESPONSE)
@@ -321,7 +318,7 @@ internal static class QueryHelper
                     }
 #endif
 
-                return (byteReader, header);
+                return (byteReader, header, retries);
             }
             // Any timeout is just another signal to continue
             catch (TimeoutException)
