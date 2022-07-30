@@ -33,9 +33,12 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
     private DemuxSocket m_socket;
 
 
-    public QueryConnectionPool(bool delayInit = true)
+    public QueryConnectionPool(bool delayInit = true, CancellationToken token = default)
     {
-        m_cancellationTokenSource = new CancellationTokenSource();
+        if (token != default && token != CancellationToken.None)
+            m_cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(token);
+        else 
+            m_cancellationTokenSource = new CancellationTokenSource();
         // This only supports IPv4, but right now, so does Steam.
         m_sharedSocket = new Socket(SocketType.Dgram, ProtocolType.Udp);
         m_sharedSocket.Ttl = 255;
@@ -182,6 +185,7 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
         if (!m_cancellationTokenSource.IsCancellationRequested)
             m_cancellationTokenSource?.Cancel();
         m_sharedSocket?.Dispose();
+        m_cancellationTokenSource?.Dispose();
     }
 
 
