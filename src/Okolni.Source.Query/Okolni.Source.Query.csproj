@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
-    <Version>1.2.3</Version>
+    <Version>1.2.4</Version>
     <Authors>Florian Adler</Authors>
     <Product>Okolni Source Query</Product>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -13,7 +13,8 @@
     <RepositoryUrl>https://github.com/Florian2406/Okolni-Source-Query</RepositoryUrl>
     <RepositoryType>GitHub</RepositoryType>
     <PackageReleaseNotes>
-        1.2.3 Embed Retries in Responses
+        1.2.4 Remove The Ship Properties/Data
+	    1.2.3 Embed Retries in Responses
 	    1.2.2 Added various fixes to QueryConnectionPool, now accepting CancellationToken, Ipv6 Support, fixes for Windows networking, fixed query pool lock issues.
 	    1.2.1 Added QueryConnectionPool
 	    1.2.0 Added Async methods
@@ -26,7 +27,7 @@
     <NeutralLanguage>en</NeutralLanguage>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <PackageId>Okolni.Source.Query</PackageId>
-    <FileVersion>1.2.3.0</FileVersion>
+    <FileVersion>1.2.4.0</FileVersion>
   </PropertyGroup>
 
 </Project>
