@@ -129,7 +129,8 @@ internal static class QueryHelper
             (var byteReader, var header, int retriesUsed) = await RequestDataFromServer(Constants.A2S_INFO_REQUEST, endPoint, socket, maxRetries,
                 sendTimeout, receiveTimeout);
 
-           
+            if (header == Constants.A2S_INFO_RESPONSE_GOLDSOURCE)
+                throw new ArgumentException("Obsolete GoldSource Response are not supported right now");
 
             if (header != Constants.A2S_INFO_RESPONSE)
                 throw new ArgumentException("The fetched Response is no A2S_INFO Response.");
