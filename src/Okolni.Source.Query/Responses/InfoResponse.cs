@@ -51,17 +51,17 @@ namespace Okolni.Source.Query.Responses
         /// <summary>
         /// Number of players on the server.
         /// </summary>
-        public uint Players { get; set; }
+        public byte Players { get; set; }
 
         /// <summary>
         /// Maximum number of players the server reports it can hold.
         /// </summary>
-        public uint MaxPlayers { get; set; }
+        public byte MaxPlayers { get; set; }
 
         /// <summary>
         /// Number of bots on the server.
         /// </summary>
-        public uint Bots { get; set; }
+        public byte Bots { get; set; }
 
         /// <summary>
         /// Indicates the type of server
@@ -93,7 +93,7 @@ namespace Okolni.Source.Query.Responses
         /// <summary>
         /// [ONLY AVAILABLE IF THE SERVER IS RUNNING 'The Ship'] The number of witnesses necessary to have a player arrested.
         /// </summary>
-        public uint? Witnesses { get; set; }
+        public byte? Witnesses { get; set; }
 
         /// <summary>
         /// [ONLY AVAILABLE IF THE SERVER IS RUNNING 'The Ship'] Time (in seconds) before a player is arrested while being witnessed.
@@ -136,7 +136,7 @@ namespace Okolni.Source.Query.Responses
         public string KeyWords { get; set; }
 
         /// <summary>
-        /// if ( EDF & 0x01 ) proves true: The server's 64-bit GameID. -
+        /// if ( EDF & 0x01 ) proves true: The server's 64-bit GameID. 
         /// If this is present, a more accurate AppID is present in the low 24 bits. 
         /// The earlier AppID could have been truncated as it was forced into 16-bit storage.
         /// </summary>
@@ -189,14 +189,14 @@ namespace Okolni.Source.Query.Responses
             response += $" Environment: {Environment};";
             response += $" Visibility: {Visibility};";
             response += $" VAC: {VAC};";
-            if(IsTheShip)
+            if (IsTheShip)
             {
                 response += $" Mode: {Mode};";
                 response += $" Witnesses: {Witnesses};";
                 response += $" Duration: {Duration};";
             }
             response += $" Version: {Version};";
-            if(HasGameID || HasPort || HasKeywords || HasSourceTv || HasSteamID)
+            if (HasGameID || HasPort || HasKeywords || HasSourceTv || HasSteamID)
             {
                 if (HasPort)
                     response += $" Port: {Port};";
