@@ -16,6 +16,7 @@ Rework implementation of retries to work with Send/Recieve timeouts
 
 Fix issues with A2S_Info/ServerInfo properties like Port/SteamID//SourceTv/Keywords/GameID which rely on the EDF (Extra Data Flag) which was improperly detecting those other fields being supported
 
+Dropped support for The Ship and all related properties
 
 
 *** Note on Retries and Send/Recieve Timeouts ***
