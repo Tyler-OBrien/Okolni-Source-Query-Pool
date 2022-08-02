@@ -85,20 +85,6 @@ namespace Okolni.Source.Query.Responses
         /// </summary>
         public bool VAC { get; set; }
 
-        /// <summary>
-        /// [ONLY AVAILABLE IF THE SERVER IS RUNNING 'The Ship'] Indicates the game mode
-        /// </summary>
-        public TheShipMode? Mode { get; set; }
-
-        /// <summary>
-        /// [ONLY AVAILABLE IF THE SERVER IS RUNNING 'The Ship'] The number of witnesses necessary to have a player arrested.
-        /// </summary>
-        public byte? Witnesses { get; set; }
-
-        /// <summary>
-        /// [ONLY AVAILABLE IF THE SERVER IS RUNNING 'The Ship'] Time (in seconds) before a player is arrested while being witnessed.
-        /// </summary>
-        public TimeSpan? Duration { get; set; }
 
         /// <summary>
         /// Version of the game installed on the server.
@@ -142,10 +128,7 @@ namespace Okolni.Source.Query.Responses
         /// </summary>
         public ulong? GameID { get; set; }
 
-        /// <summary>
-        /// If the Server is a The Ship Server
-        /// </summary>
-        public bool IsTheShip => ID == 2400;
+
 
         /// <summary>
         /// If the Info contains a game Port
@@ -189,12 +172,6 @@ namespace Okolni.Source.Query.Responses
             response += $" Environment: {Environment};";
             response += $" Visibility: {Visibility};";
             response += $" VAC: {VAC};";
-            if (IsTheShip)
-            {
-                response += $" Mode: {Mode};";
-                response += $" Witnesses: {Witnesses};";
-                response += $" Duration: {Duration};";
-            }
             response += $" Version: {Version};";
             if (HasGameID || HasPort || HasKeywords || HasSourceTv || HasSteamID)
             {

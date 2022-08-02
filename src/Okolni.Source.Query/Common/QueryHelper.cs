@@ -154,14 +154,6 @@ internal static class QueryHelper
                 VAC = byteReader.GetByte() == 0x01
             };
 
-            //Check for TheShip
-            if (res.ID == 2400)
-            {
-                res.Mode = byteReader.GetByte().ToTheShipMode();
-                res.Witnesses = byteReader.GetByte();
-                res.Duration = TimeSpan.FromSeconds(byteReader.GetByte());
-            }
-
             res.Version = byteReader.GetString();
 
             //IF Has EDF Flag 
@@ -210,7 +202,7 @@ internal static class QueryHelper
 
             var playerResponse = new PlayerResponse { Header = header, Retries = retriesUsed, Players = new List<Player>() };
             int playercount = byteReader.GetByte();
-            for (var i = 1; i <= playercount; i++)
+            while (byteReader.Remaining > 9) // Min player obj is 9 bytes.. playercount can't be trusted as it maxes out at 255, Rust & others can have more players.
                 playerResponse.Players.Add(new Player
                 {
                     Index = byteReader.GetByte(),
@@ -218,17 +210,6 @@ internal static class QueryHelper
                     Score = byteReader.GetUInt(),
                     Duration = TimeSpan.FromSeconds(byteReader.GetFloat())
                 });
-
-            //IF more bytes == THE SHIP
-            if (byteReader.Remaining > 0)
-            {
-                playerResponse.IsTheShip = true;
-                for (var i = 0; i < playercount; i++)
-                {
-                    playerResponse.Players[i].Deaths = byteReader.GetUInt();
-                    playerResponse.Players[i].Money = byteReader.GetUInt();
-                }
-            }
 
             return playerResponse;
         }

@@ -90,13 +90,5 @@ namespace Okolni.Source.Common
             else
                 return returnval;
         }
-
-        public static TheShipMode ToTheShipMode(this byte data)
-        {
-            if (!Constants.ByteTheShipModeMapping.TryGetValue(data, out var returnval))
-                throw new ArgumentException("Given byte cannot be parsed");
-            else
-                return returnval;
-        }
     }
 }

@@ -35,19 +35,6 @@
         }
 
         /// <summary>
-        /// Mode of the TheShip Server
-        /// </summary>
-        public enum TheShipMode
-        {
-            Hunt,
-            Elimination,
-            Duel,
-            Deathmatch,
-            VipTeam,
-            TeamElimination
-        }
-
-        /// <summary>
         /// The visibility of the server
         /// </summary>
         public enum Visibility

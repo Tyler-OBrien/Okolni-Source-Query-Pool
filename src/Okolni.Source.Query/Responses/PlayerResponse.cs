@@ -20,11 +20,6 @@ namespace Okolni.Source.Query.Responses
         /// List of Players on the server
         /// </summary>
         public List<Player> Players { get; set; }
-
-        /// <summary>
-        /// If the Playerresponse is a The Ship Response.
-        /// </summary>
-        public bool IsTheShip = false;
     }
 
     public class Player
@@ -48,8 +43,5 @@ namespace Okolni.Source.Query.Responses
         /// Time (in seconds) player has been connected to the server.
         /// </summary>
         public TimeSpan Duration { get; set; }
-
-        public uint? Deaths { get; set; }
-        public uint? Money { get; set; }
     }
 }

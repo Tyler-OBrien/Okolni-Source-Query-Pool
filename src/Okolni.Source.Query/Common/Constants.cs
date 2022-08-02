@@ -145,18 +145,6 @@ namespace Okolni.Source.Common
             { 0x6f, Enums.Environment.Mac }
         };
 
-        /// <summary>
-        /// Mapping for byte to 'TheShipMode' conversion
-        /// </summary>
-        public static Dictionary<byte, TheShipMode> ByteTheShipModeMapping = new Dictionary<byte, TheShipMode>()
-        {
-            { 0x00, TheShipMode.Hunt },
-            { 0x01, TheShipMode.Elimination },
-            { 0x02, TheShipMode.Duel },
-            { 0x03, TheShipMode.Deathmatch },
-            { 0x04, TheShipMode.VipTeam },
-            { 0x05, TheShipMode.TeamElimination }
-        };
 
         /// <summary>
         /// Mapping for byte to 'Visibility' conversion
