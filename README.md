@@ -1,23 +1,20 @@
 # Fork 
 
+This fork's main purpose is to implement experimental sharing of a single UDP Socket to allow for "relatively high performance" querying of thousands of servers at once without spawning thousands of sockets and their overhead. ASync and other fixes are in the original library, which is https://github.com/Florian2406/Okolni-Source-Query
+
+Some words of wisdom if you want to query thousands of servers to collect statistics. Linux works best with its network stack, outperforming Windows greatly. Use The QueryPool like in the example of this doc/example repo. Swallow timeout exceptions and such for failed servers, there will always be some. It's even on Linux, you should  limit to ~1000 or so concurrent queries, the "query pool" really isn't optimized and will likely fill the socket's buffer at some point and start missing packets if too busy. You can use the Steam Web API to query a list of ~20k servers for a specific APP ID. The Steam Master Servers are aggressively rate limited from what I've tested, and return only the IP/Port, whereas the Steam Web API returns almost the same information as A2S_Info/GetServerInfo.
+
+Games like Arma 3 use A2S_Rules for their mods, but not in a compatiable format, watch out for them. Games running on Gold Source (https://en.wikipedia.org/wiki/GoldSrc) are not supported by this library.  It's not safe to assume that each server on the server list is an actual unique server. I found a few servers that use different Query Ports on the same IP, but return the same Port (Game Port), so make sure you are identifying servers by Addr/QueryPort and not Addr/Port. Some servers block A2S_Rules/A2S_Players, and some games also do not support them. Some games like Post Scriptum return 0 for player count in A2S_Players and only return correct player count in A2S_Rules, and some games like Rust can have too many players. A2S_Players returns 'players', the amount of players on, as a byte, so a max of 255. Games treat this overflow differently, some return 255 if over 255 are on, Rust for example will just return the player count mod 255 (i.e 550 players on, will show 40). For those games, specifically Rust, you can get the full list of players from A2S_Players. This library supports over 255 players, but beware the underlying A2S_Players response also has a player count which is a byte, so some libraries will only parse a max of 255 players even if there is more.
+
 ** Work in Progress **
 
-Add pooling/batching, use a single UDP Socket to send and receive from many servers at once. On Windows, 512 queries at once seems to be stable. On Linux, 1024 is stable, but I haven't tried to push it past that
+* Add pooling/batching, use a single UDP Socket to send and receive from many servers at once. On Windows, 512 queries at once seems to be stable. On Linux, 1024 is stable, but I haven't tried to push it past that.
 
-This Fork changes the following:
+* Move to .NET 6 
 
-Add ASync non-blocking methods
+* Rework implementation of retries to work with Send/Recieve timeouts
 
-Add Send and Recieve Timeouts
-
-Move to .NET 6 for CancellationTokenSupport on UDPClient Send/Recv Methods
-
-Rework implementation of retries to work with Send/Recieve timeouts
-
-Fix issues with A2S_Info/ServerInfo properties like Port/SteamID//SourceTv/Keywords/GameID which rely on the EDF (Extra Data Flag) which was improperly detecting those other fields being supported
-
-Dropped support for The Ship and all related properties
-
+* Dropped support for The Ship and all related properties
 
 *** Note on Retries and Send/Recieve Timeouts ***
 
