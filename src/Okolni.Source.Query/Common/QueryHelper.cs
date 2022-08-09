@@ -211,6 +211,14 @@ internal static class QueryHelper
                     Duration = TimeSpan.FromSeconds(byteReader.GetFloat())
                 });
 
+            // Hack to try to fix errors with corrupted players...
+            if (playerResponse.Players.Count > 255 &&
+                playerResponse.Players.All(player => string.IsNullOrWhiteSpace(player.Name)))
+            {
+                // Unexpected, probably corruption...
+                playerResponse.Players.RemoveAll(player => string.IsNullOrWhiteSpace(player.Name));
+            }
+
             return playerResponse;
         }
         catch (Exception ex)
