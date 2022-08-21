@@ -11,12 +11,12 @@ public class Program
 {
     private static async Task Main(string[] args)
     {
-        string Host = "185.239.211.62";
-        int Port = 39215;
+        string Host = "51.79.37.206";
+        int Port = 2303;
         
         using IQueryConnection conn = new QueryConnection();
-        conn.Host = "185.239.211.62";
-        conn.Port = 39215;
+        conn.Host = Host;
+        conn.Port = Port;
 
         conn.Setup();
 
@@ -40,10 +40,11 @@ public class Program
         connPool.SendTimeout = 500;
         connPool.Setup();
         var serverEndpoint1 = new IPEndPoint(IPAddress.Parse(Host), Port);
-        var serverEndpoint2 = new IPEndPoint(IPAddress.Parse("176.57.181.146"), 28915);
-        var serverEndpoint3 = new IPEndPoint(IPAddress.Parse("23.109.144.148"), 28215);
-        var serverEndpoint4 = new IPEndPoint(IPAddress.Parse("193.164.16.98"), 27822);
-        var serverEndpoint5 = new IPEndPoint(IPAddress.Parse("176.57.140.69"), 28915);
+        var serverEndpoint2 = new IPEndPoint(IPAddress.Parse("202.165.126.235"), 2303);
+        var serverEndpoint3 = new IPEndPoint(IPAddress.Parse("46.174.54.84"), 27015);
+        var serverEndpoint4 = new IPEndPoint(IPAddress.Parse("164.132.202.2"), 27018);
+        var serverEndpoint5 = new IPEndPoint(IPAddress.Parse("173.199.107.143"), 7780);
+
 
 
         var infoTask1 = connPool.GetInfoAsync(serverEndpoint1);

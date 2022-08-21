@@ -13,16 +13,12 @@ namespace Okolni.Source.Query.Test
     public class FunctionalTests
     {
         [TestMethod]
-        [DataRow("64.44.28.18", 28016)]
-        [DataRow("45.235.99.86", 9702)]
-        [DataRow("131.196.197.89", 9877)]
-        [DataRow("176.57.181.146", 28915)]
-        [DataRow("23.109.144.148", 28215)]
-        [DataRow("176.57.140.69", 28915)]
-        [DataRow("185.239.211.116", 32915)]
-        [DataRow("176.57.173.121", 31715)]
-        [DataRow("185.189.255.36", 27802)]
-        [DataRow("193.164.16.98", 27822)]
+        [DataRow("51.79.37.206", 2303)]
+        [DataRow("202.165.126.235", 2303)]
+        [DataRow("46.174.54.84", 27015)]
+        [DataRow("164.132.202.2", 27018)]
+        [DataRow("173.199.107.143", 7780)]
+        [DataRow("216.52.148.47", 27015)]
 
         public void QueryTestSync(string Host, int Port)
         {
@@ -44,15 +40,12 @@ namespace Okolni.Source.Query.Test
         }
 
         [TestMethod]
-        [DataRow("45.235.99.86", 9702)]
-        [DataRow("131.196.197.89", 9877)]
-        [DataRow("176.57.181.146", 28915)]
-        [DataRow("23.109.144.148", 28215)]
-        [DataRow("176.57.140.69", 28915)]
-        [DataRow("185.239.211.116", 32915)]
-        [DataRow("176.57.173.121", 31715)]
-        [DataRow("185.189.255.36", 27802)]
-        [DataRow("193.164.16.98", 27822)]
+        [DataRow("51.79.37.206", 2303)]
+        [DataRow("202.165.126.235", 2303)]
+        [DataRow("46.174.54.84", 27015)]
+        [DataRow("164.132.202.2", 27018)]
+        [DataRow("173.199.107.143", 7780)]
+        [DataRow("216.52.148.47", 27015)]
         public async Task QueryTestASync(string Host, int Port)
         {
             using IQueryConnection conn = new QueryConnection();
@@ -78,11 +71,11 @@ namespace Okolni.Source.Query.Test
             connPool.ReceiveTimeout = 5000;
             connPool.SendTimeout = 5000;
             connPool.Setup();
-            var serverEndpoint1 = new IPEndPoint(IPAddress.Parse("185.239.211.62"), 39215);
-            var serverEndpoint2 = new IPEndPoint(IPAddress.Parse("176.57.181.146"), 28915);
-            var serverEndpoint3 = new IPEndPoint(IPAddress.Parse("23.109.144.148"), 28215);
-            var serverEndpoint4 = new IPEndPoint(IPAddress.Parse("193.164.16.98"), 27822);
-            var serverEndpoint5 = new IPEndPoint(IPAddress.Parse("176.57.140.69"), 28915);
+            var serverEndpoint1 = new IPEndPoint(IPAddress.Parse("51.79.37.206"), 2303);
+            var serverEndpoint2 = new IPEndPoint(IPAddress.Parse("202.165.126.235"), 2303);
+            var serverEndpoint3 = new IPEndPoint(IPAddress.Parse("46.174.54.84"), 27015);
+            var serverEndpoint4 = new IPEndPoint(IPAddress.Parse("164.132.202.2"), 27018);
+            var serverEndpoint5 = new IPEndPoint(IPAddress.Parse("173.199.107.143"), 7780);
 
             var infoTask1 = connPool.GetInfoAsync(serverEndpoint1);
             var infoTask2 = connPool.GetInfoAsync(serverEndpoint2);
