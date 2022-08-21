@@ -75,7 +75,7 @@ public class UDPDeMultiplexer
         }
     }
 
-    internal ValueTask<SocketReceiveFromResult> InternalReceive(Memory<byte> buffer,
+    internal async ValueTask<SocketReceiveFromResult> InternalReceive(Memory<byte> buffer,
         EndPoint remoteEndPoint,
         CancellationToken cancellationToken)
     {
@@ -95,7 +95,7 @@ public class UDPDeMultiplexer
 #endif
                     RemoveIfEmpty(remoteEndPoint, demuxConnections);
                     value.MemoryBuffer.CopyTo(buffer);
-                    return new ValueTask<SocketReceiveFromResult>(value.ReceiveFrom.Task);
+                    return await new ValueTask<SocketReceiveFromResult>(value.ReceiveFrom.Task);
                 }
 
                 // If it isn't dirty, it's waiting just like us, and we should add it back.
@@ -103,18 +103,18 @@ public class UDPDeMultiplexer
             }
 
             // If we couldn't get anything from the queue, or we could but it wasn't dirty, we should enqueue our own item.
-            var taskCompletionSource = new TaskCompletionSource<SocketReceiveFromResult>();
+            var taskCompletionSource = new TaskCompletionSource<SocketReceiveFromResult>(TaskCreationOptions.RunContinuationsAsynchronously);
             Enqueue(demuxConnections, new DemuxConnection(taskCompletionSource, buffer, false, false,
                 cancellationToken));
 #if DEBUG
             Console.WriteLine($"New Listener: {remoteEndPoint} - {remoteEndPoint.Serialize()}");
 #endif
 
-            return new ValueTask<SocketReceiveFromResult>(taskCompletionSource.Task);
+            return await new ValueTask<SocketReceiveFromResult>(taskCompletionSource.Task);
         }
 
         // If there's no queue yet, we should create it and add it.
-        var tcs = new TaskCompletionSource<SocketReceiveFromResult>();
+        var tcs = new TaskCompletionSource<SocketReceiveFromResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var newDemuxConnections = new DemuxConnections();
         Enqueue(newDemuxConnections, new DemuxConnection(tcs, buffer, false, false, cancellationToken));
         Connections.Add(remoteEndPoint, newDemuxConnections);
@@ -122,7 +122,7 @@ public class UDPDeMultiplexer
         Console.WriteLine($"New Listener: {remoteEndPoint} - {remoteEndPoint.Serialize()}");
 #endif
 
-        return new ValueTask<SocketReceiveFromResult>(tcs.Task);
+        return await new ValueTask<SocketReceiveFromResult>(tcs.Task);
     }
 
 
@@ -189,7 +189,7 @@ public class UDPDeMultiplexer
                         // If we couldn't dequeue an item or the dequeued item was dirty... we need to enqueue our own
                         if (shouldEnqueue)
                         {
-                            var tcs = new TaskCompletionSource<SocketReceiveFromResult>();
+                            var tcs = new TaskCompletionSource<SocketReceiveFromResult>(TaskCreationOptions.RunContinuationsAsynchronously);
                             tcs.SetResult(udpClientReceive);
                             Enqueue(demuxConnections, new DemuxConnection(tcs,
                                 buffer, true, true));
@@ -202,7 +202,7 @@ public class UDPDeMultiplexer
                         Console.WriteLine(
                             $"Found nothing listening... on {udpClientReceive.RemoteEndPoint}, {Connections.Count} - {Convert.ToBase64String(buffer.ToArray().Take(10).ToArray())}");
 #endif
-                        var tcs = new TaskCompletionSource<SocketReceiveFromResult>();
+                        var tcs = new TaskCompletionSource<SocketReceiveFromResult>(TaskCreationOptions.RunContinuationsAsynchronously);
                         tcs.SetResult(udpClientReceive);
 
                         var newDemuxConnections = new DemuxConnections();
