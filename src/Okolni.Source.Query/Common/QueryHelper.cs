@@ -212,8 +212,7 @@ internal static class QueryHelper
                 });
 
             // Hack to try to fix errors with corrupted players...
-            if (playerResponse.Players.Count > 255 &&
-                playerResponse.Players.All(player => string.IsNullOrWhiteSpace(player.Name)))
+            if (playerResponse.Players.Count > 255)
             {
                 // Unexpected, probably corruption...
                 playerResponse.Players.RemoveAll(player => string.IsNullOrWhiteSpace(player.Name));
