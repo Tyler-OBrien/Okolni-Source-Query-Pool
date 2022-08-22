@@ -1,4 +1,6 @@
-﻿namespace Okolni.Source.Common.ByteHelper
+﻿using System;
+
+namespace Okolni.Source.Common.ByteHelper
 {
     /// <summary>
     /// A byte reader to help read the byte response
@@ -8,7 +10,7 @@
         /// <summary>
         /// The byte response
         /// </summary>
-        byte[] Response { get; set; }
+        Memory<byte> Response { get; set; }
 
         /// <summary>
         /// The iterator position

@@ -59,13 +59,12 @@ public class DemuxSocket : ISocket
 
 
     /// <inheritdoc />
-    public ValueTask<SocketReceiveFromResult> ReceiveFromAsync(
-        Memory<byte> buffer,
+    public async ValueTask<Memory<byte>> ReceiveFromAsync(
         SocketFlags socketFlags,
         EndPoint remoteEndPoint,
         CancellationToken cancellationToken = default)
     {
         m_receiveCallback?.Invoke();
-        return m_udpDeMultiplexer.ReceiveAsync(buffer, socketFlags, remoteEndPoint, m_socket, cancellationToken);
+        return await m_udpDeMultiplexer.ReceiveAsync(socketFlags, remoteEndPoint, m_socket, cancellationToken);
     }
 }

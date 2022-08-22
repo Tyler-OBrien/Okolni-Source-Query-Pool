@@ -15,36 +15,32 @@ namespace Okolni.Source.Query.Common.SocketHelpers;
  * I don't think there's any native way to do this with the .NET Socket API. I tried giving it a certain IP Endpoint in the ReceiveFromAsync method, but it would still get responses made for other endpoints
  * There's probably a better way to do this, and this is really messy right now, but it does seem to work without issue.
  */
-public struct DemuxConnection
+public class DemuxConnection
 {
-    public DemuxConnection(TaskCompletionSource<SocketReceiveFromResult> receiveFrom,
-        Memory<byte> buffer, bool bufferDirty, bool generated)
+    public DemuxConnection(TaskCompletionSource<Memory<byte>> receiveFrom,
+        bool bufferDirty, bool generated)
     {
         ReceiveFrom = receiveFrom;
         CancellationToken = CancellationToken.None;
-        MemoryBuffer = buffer;
         BufferDirty = bufferDirty;
         Generated = generated;
     }
 
-    public DemuxConnection(TaskCompletionSource<SocketReceiveFromResult> receiveFrom,
-        Memory<byte> buffer, bool bufferDirty, bool generated, CancellationToken cancellation)
+    public DemuxConnection(TaskCompletionSource<Memory<byte>> receiveFrom, bool bufferDirty, bool generated, CancellationToken cancellation)
     {
         ReceiveFrom = receiveFrom;
         CancellationToken = cancellation;
-        MemoryBuffer = buffer;
         BufferDirty = bufferDirty;
         Generated = generated;
     }
 
-    public TaskCompletionSource<SocketReceiveFromResult> ReceiveFrom;
+    public TaskCompletionSource<Memory<byte>> ReceiveFrom;
     public CancellationToken CancellationToken;
-    public Memory<byte> MemoryBuffer;
     public bool BufferDirty;
     public bool Generated;
 }
 
-public struct DemuxConnections
+public class DemuxConnections
 {
     public DemuxConnections()
     {
@@ -63,7 +59,7 @@ public class UDPDeMultiplexer
     private int _waitingConnections;
 
 
-    public ValueTask<SocketReceiveFromResult> ReceiveAsync(Memory<byte> buffer,
+    public ValueTask<Memory<byte>> ReceiveAsync(
         SocketFlags socketFlags,
         EndPoint remoteEndPoint,
         Socket socket,
@@ -71,11 +67,11 @@ public class UDPDeMultiplexer
     {
         lock (mutex)
         {
-            return InternalReceive(buffer, remoteEndPoint, cancellationToken);
+            return InternalReceive(remoteEndPoint, cancellationToken);
         }
     }
 
-    internal async ValueTask<SocketReceiveFromResult> InternalReceive(Memory<byte> buffer,
+    internal async ValueTask<Memory<byte>> InternalReceive(
         EndPoint remoteEndPoint,
         CancellationToken cancellationToken)
     {
@@ -91,11 +87,10 @@ public class UDPDeMultiplexer
                 {
 #if DEBUG
                     Console.WriteLine(
-                        $"Found instantly for {remoteEndPoint}...exiting early... {Convert.ToBase64String(value.MemoryBuffer.ToArray().Take(10).ToArray())}");
+                        $"Found instantly for {remoteEndPoint}...exiting early... {Convert.ToBase64String(value.ReceiveFrom.Task.Result.ToArray().Take(10).ToArray())}");
 #endif
                     RemoveIfEmpty(remoteEndPoint, demuxConnections);
-                    value.MemoryBuffer.CopyTo(buffer);
-                    return await new ValueTask<SocketReceiveFromResult>(value.ReceiveFrom.Task);
+                    return await new ValueTask<Memory<byte>>(value.ReceiveFrom.Task);
                 }
 
                 // If it isn't dirty, it's waiting just like us, and we should add it back.
@@ -103,26 +98,26 @@ public class UDPDeMultiplexer
             }
 
             // If we couldn't get anything from the queue, or we could but it wasn't dirty, we should enqueue our own item.
-            var taskCompletionSource = new TaskCompletionSource<SocketReceiveFromResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-            Enqueue(demuxConnections, new DemuxConnection(taskCompletionSource, buffer, false, false,
+            var taskCompletionSource = new TaskCompletionSource<Memory<byte>>(TaskCreationOptions.RunContinuationsAsynchronously);
+            Enqueue(demuxConnections, new DemuxConnection(taskCompletionSource, false, false,
                 cancellationToken));
 #if DEBUG
             Console.WriteLine($"New Listener: {remoteEndPoint} - {remoteEndPoint.Serialize()}");
 #endif
 
-            return await new ValueTask<SocketReceiveFromResult>(taskCompletionSource.Task);
+            return await new ValueTask<Memory<byte>>(taskCompletionSource.Task);
         }
 
         // If there's no queue yet, we should create it and add it.
-        var tcs = new TaskCompletionSource<SocketReceiveFromResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tcs = new TaskCompletionSource<Memory<byte>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var newDemuxConnections = new DemuxConnections();
-        Enqueue(newDemuxConnections, new DemuxConnection(tcs, buffer, false, false, cancellationToken));
+        Enqueue(newDemuxConnections, new DemuxConnection(tcs, false, false, cancellationToken));
         Connections.Add(remoteEndPoint, newDemuxConnections);
 #if DEBUG
         Console.WriteLine($"New Listener: {remoteEndPoint} - {remoteEndPoint.Serialize()}");
 #endif
 
-        return await new ValueTask<SocketReceiveFromResult>(tcs.Task);
+        return await new ValueTask<Memory<byte>>(tcs.Task);
     }
 
 
@@ -137,7 +132,11 @@ public class UDPDeMultiplexer
 
         while (true)
         {
-            if (token.IsCancellationRequested) break;
+            if (token.IsCancellationRequested)
+            {
+                Cleanup();
+                break;
+            }
             // We might have timed out from the delayTask, but still are waiting for a new packet.
             if (udpClientReceiveTask == null || udpClientReceiveTask.IsCompleted)
             {
@@ -156,6 +155,7 @@ public class UDPDeMultiplexer
             if (udpClientReceiveTask.IsCompletedSuccessfully)
             {
                 var udpClientReceive = await udpClientReceiveTask;
+                buffer = buffer.Slice(0, udpClientReceive.ReceivedBytes);
                 lock (mutex)
                 {
                     // Check if we have a queue created
@@ -180,8 +180,7 @@ public class UDPDeMultiplexer
                             {
                                 shouldEnqueue = false;
                                 demuxConnection.BufferDirty = true;
-                                buffer.CopyTo(demuxConnection.MemoryBuffer);
-                                demuxConnection.ReceiveFrom.SetResult(udpClientReceive);
+                                demuxConnection.ReceiveFrom.SetResult(buffer);
                                 RemoveIfEmpty(udpClientReceive.RemoteEndPoint, demuxConnections);
                             }
                         }
@@ -189,10 +188,9 @@ public class UDPDeMultiplexer
                         // If we couldn't dequeue an item or the dequeued item was dirty... we need to enqueue our own
                         if (shouldEnqueue)
                         {
-                            var tcs = new TaskCompletionSource<SocketReceiveFromResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-                            tcs.SetResult(udpClientReceive);
-                            Enqueue(demuxConnections, new DemuxConnection(tcs,
-                                buffer, true, true));
+                            var tcs = new TaskCompletionSource<Memory<byte>>(TaskCreationOptions.RunContinuationsAsynchronously);
+                            tcs.SetResult(buffer);
+                            Enqueue(demuxConnections, new DemuxConnection(tcs, true, true));
                         }
                     }
                     // This endpoint isn't registered yet, create a new queue..
@@ -202,11 +200,11 @@ public class UDPDeMultiplexer
                         Console.WriteLine(
                             $"Found nothing listening... on {udpClientReceive.RemoteEndPoint}, {Connections.Count} - {Convert.ToBase64String(buffer.ToArray().Take(10).ToArray())}");
 #endif
-                        var tcs = new TaskCompletionSource<SocketReceiveFromResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-                        tcs.SetResult(udpClientReceive);
+                        var tcs = new TaskCompletionSource<Memory<byte>>(TaskCreationOptions.RunContinuationsAsynchronously);
+                        tcs.SetResult(buffer);
 
                         var newDemuxConnections = new DemuxConnections();
-                        Enqueue(newDemuxConnections, new DemuxConnection(tcs, buffer, true, true));
+                        Enqueue(newDemuxConnections, new DemuxConnection(tcs, true, true));
                         Connections.Add(udpClientReceive.RemoteEndPoint, newDemuxConnections);
                     }
                 }
@@ -272,5 +270,19 @@ public class UDPDeMultiplexer
     public int GetWaitingConnections()
     {
         return _waitingConnections;
+    }
+
+    private void Cleanup()
+    {
+        lock (mutex)
+        {
+            if (Connections.Keys.Any())
+                foreach (var keyPair in Connections.Keys.ToList())
+                    if (Connections.TryGetValue(keyPair, out var demuxConnections))
+                        while (TryDequeue(demuxConnections, out var value))
+                            value.ReceiveFrom.TrySetException(
+                                new OperationCanceledException("Operation was cancelled by the pool being disposed"));
+            Connections.Clear();
+        }
     }
 }

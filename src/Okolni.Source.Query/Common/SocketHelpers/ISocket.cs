@@ -33,8 +33,7 @@ public interface ISocket
     ///     An asynchronous task that completes with a <see cref="T:System.Net.Sockets.SocketReceiveFromResult" />
     ///     containing the number of bytes received and the endpoint of the sending host.
     /// </returns>
-    public ValueTask<SocketReceiveFromResult> ReceiveFromAsync(
-        Memory<byte> buffer,
+    public ValueTask<Memory<byte>> ReceiveFromAsync(
         SocketFlags socketFlags,
         EndPoint remoteEndPoint,
         CancellationToken cancellationToken = default);

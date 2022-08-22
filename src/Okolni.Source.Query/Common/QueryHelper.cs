@@ -35,11 +35,9 @@ internal static class QueryHelper
         newCancellationToken.CancelAfter(ReceiveTimeout);
         try
         {
-            Memory<byte> buffer = new byte[65527];
             var udpClientReceive =
-                await socket.ReceiveFromAsync(buffer, SocketFlags.None, endPoint, newCancellationToken.Token);
-            var recvPacket = buffer[..udpClientReceive.ReceivedBytes];
-            return recvPacket.ToArray();
+                await socket.ReceiveFromAsync(SocketFlags.None, endPoint, newCancellationToken.Token);
+            return udpClientReceive.ToArray();
         }
         catch (OperationCanceledException)
         {

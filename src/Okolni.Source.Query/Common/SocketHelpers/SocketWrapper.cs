@@ -27,12 +27,13 @@ public class SocketWrapper : ISocket
 
 
     /// <inheritdoc />
-    public ValueTask<SocketReceiveFromResult> ReceiveFromAsync(
-        Memory<byte> buffer,
+    public async ValueTask<Memory<byte>> ReceiveFromAsync(
         SocketFlags socketFlags,
         EndPoint remoteEndPoint,
         CancellationToken cancellationToken = default)
     {
-        return m_socket.ReceiveFromAsync(buffer, socketFlags, remoteEndPoint, cancellationToken);
+        Memory<byte> buffer = new byte[65527];
+        var response = await m_socket.ReceiveFromAsync(buffer, socketFlags, remoteEndPoint, cancellationToken);
+        return buffer.Slice(0, response.ReceivedBytes);
     }
 }

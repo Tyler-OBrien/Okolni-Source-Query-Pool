@@ -7,17 +7,17 @@ namespace Okolni.Source.Common.ByteHelper
     public class ByteReader : IByteReader
     {
         private int _iterator = 0;
-        private byte[] _response;
+        private Memory<byte>? _response;
 
         /// <inheritdoc/>
-        public byte[] Response
+        public Memory<byte> Response
         {
             get
             {
-                if (_response == null)
+                if (_response.HasValue == false)
                     throw new ArgumentNullException("Response has to be set in order to get values from it");
 
-                return _response;
+                return _response.Value;
             }
             set
             {
@@ -69,7 +69,7 @@ namespace Okolni.Source.Common.ByteHelper
 
             var val = Response.SubArray(Iterator, length);
             Iterator += length;
-            return val;
+            return val.ToArray();
         }
 
         /// <inheritdoc/>
@@ -77,8 +77,8 @@ namespace Okolni.Source.Common.ByteHelper
         {
             if (Remaining < 1)
                 throw new ArgumentOutOfRangeException("Not Enough bytes left to read");
-
-            var val = Response[Iterator];
+            
+            var val = Response.Span[Iterator];
             Iterator++;
             return val;
         }
@@ -89,7 +89,7 @@ namespace Okolni.Source.Common.ByteHelper
             if (Remaining < 4)
                 throw new ArgumentOutOfRangeException("Not Enough bytes left to read");
 
-            float floatValue = BitConverter.ToSingle(Response, Iterator);
+            float floatValue = BitConverter.ToSingle(Response.Slice(Iterator, 4).Span);
             Iterator += 4;
 
             return floatValue;
@@ -101,7 +101,7 @@ namespace Okolni.Source.Common.ByteHelper
             if (Remaining < 2)
                 throw new ArgumentOutOfRangeException("Not Enough bytes left to read");
 
-            short shortValue = BitConverter.ToInt16(Response, Iterator);
+            short shortValue = BitConverter.ToInt16(Response.Slice(Iterator, 2).Span);
             Iterator += 2;
 
             return shortValue;
@@ -114,7 +114,7 @@ namespace Okolni.Source.Common.ByteHelper
             if (Remaining < 2)
                 throw new ArgumentOutOfRangeException("Not Enough bytes left to read");
 
-            ushort shortValue = BitConverter.ToUInt16(Response, Iterator);
+            ushort shortValue = BitConverter.ToUInt16(Response.Slice(Iterator, 2).Span);
             Iterator += 2;
 
             return shortValue;
@@ -126,7 +126,7 @@ namespace Okolni.Source.Common.ByteHelper
             if (Remaining < 4)
                 throw new ArgumentOutOfRangeException("Not Enough bytes left to read");
 
-            int intValue = BitConverter.ToInt32(Response, Iterator);
+            int intValue = BitConverter.ToInt32(Response.Slice(Iterator, 4).Span);
             Iterator += 4;
 
             return intValue;
@@ -139,7 +139,7 @@ namespace Okolni.Source.Common.ByteHelper
             if (Remaining < 4)
                 throw new ArgumentOutOfRangeException("Not Enough bytes left to read");
 
-            uint uintValue = BitConverter.ToUInt32(Response, Iterator);
+            uint uintValue = BitConverter.ToUInt32(Response.Slice(Iterator, 4).Span);
             Iterator += 4;
 
             return uintValue;
@@ -152,7 +152,7 @@ namespace Okolni.Source.Common.ByteHelper
             if (Remaining < 8)
                 throw new ArgumentOutOfRangeException("Not Enough bytes left to read");
 
-            long longValue = BitConverter.ToInt64(Response, Iterator);
+            long longValue = BitConverter.ToInt64(Response.Slice(Iterator, 8).Span);
             Iterator += 8;
 
             return longValue;
@@ -164,7 +164,7 @@ namespace Okolni.Source.Common.ByteHelper
             if (Remaining < 8)
                 throw new ArgumentOutOfRangeException("Not Enough bytes left to read");
 
-            ulong longValue = BitConverter.ToUInt64(Response, Iterator);
+            ulong longValue = BitConverter.ToUInt64(Response.Slice(Iterator, 8).Span);
             Iterator += 8;
 
             return longValue;
@@ -181,7 +181,7 @@ namespace Okolni.Source.Common.ByteHelper
             if (posNextNullChar == -1)
                 throw new ArgumentOutOfRangeException("No valid string could be found in the remaining bytes");
 
-            string stringValue = Encoding.UTF8.GetString(Response, Iterator, posNextNullChar - Iterator);
+            string stringValue = Encoding.UTF8.GetString(Response.Slice(Iterator, posNextNullChar - Iterator).Span);
 
             Iterator = posNextNullChar + 1;
 
@@ -197,7 +197,7 @@ namespace Okolni.Source.Common.ByteHelper
             if (Remaining < 1)
                 throw new ArgumentOutOfRangeException("Not Enough bytes left to read");
 
-            return Response.SubArray((int)iterator, Remaining);
+            return Response.Slice(iterator.Value).ToArray();
         }
     }
 }

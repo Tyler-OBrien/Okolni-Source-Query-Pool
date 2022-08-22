@@ -17,12 +17,25 @@ namespace Okolni.Source.Common
         /// <param name="length">The length of the subarray to extract</param>
         /// <typeparam name="T">The generic type of the array</typeparam>
         /// <returns>The sub array</returns>
+        public static Memory<T> SubArray<T>(this Memory<T> data, int index, int length)
+        {
+            return data.Slice(index, length);
+        }
+        /// <summary>
+        /// Gets a subarray specified by the index and the length
+        /// </summary>
+        /// <param name="data">The array to get the subarray from</param>
+        /// <param name="index">The index from where to get the subarray</param>
+        /// <param name="length">The length of the subarray to extract</param>
+        /// <typeparam name="T">The generic type of the array</typeparam>
+        /// <returns>The sub array</returns>
         public static T[] SubArray<T>(this T[] data, int index, int length)
         {
             T[] result = new T[length];
             Array.Copy(data, index, result, 0, length);
             return result;
         }
+
 
         /// <summary>
         /// Inserts an array into another array
@@ -52,11 +65,12 @@ namespace Okolni.Source.Common
             }
         }
 
-        public static int GetNextNullCharPosition(this byte[] data, int startindex)
+        public static int GetNextNullCharPosition(this Memory<byte> data, int startindex)
         {
+            var dataspan = data.Span;
             for (; startindex < data.Length; startindex++)
             {
-                if (data[startindex].Equals(0x00))
+                if (dataspan[startindex].Equals(0x00))
                     return startindex;
             }
             return -1;
