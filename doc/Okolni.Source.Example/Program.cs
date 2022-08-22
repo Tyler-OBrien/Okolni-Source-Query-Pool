@@ -11,8 +11,8 @@ public class Program
 {
     private static async Task Main(string[] args)
     {
-        string Host = "51.79.37.206";
-        int Port = 2303;
+        string Host = "83.137.228.99";
+        int Port = 28015;
         
         using IQueryConnection conn = new QueryConnection();
         conn.Host = Host;
@@ -53,7 +53,7 @@ public class Program
         var infoTask4 = connPool.GetInfoAsync(serverEndpoint4);
         var infoTask5 = connPool.GetInfoAsync(serverEndpoint5);
         await Task.WhenAll(infoTask1, infoTask2, infoTask3, infoTask4, infoTask5);
-        var (info1, info2, info3, info4, info5) = (infoTask1.Result, infoTask2.Result, infoTask3.Result, infoTask4.Result, infoTask5.Result);
+        var (info1, info2, info3, info4, info5) = (await infoTask1, await infoTask2, await infoTask3, await infoTask4, await infoTask5);
         
         Console.WriteLine($"Server info: {info1}");
         Console.WriteLine($"Server info: {info2}");
