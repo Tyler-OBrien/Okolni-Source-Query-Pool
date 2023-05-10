@@ -1,0 +1,41 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Version>1.2.8</Version>
+    <Authors>Tyler O'Brien</Authors>
+    <Product>Okolni Source Query Pool</Product>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Description>This is a fork of Okolni Source Query to use a single UDP Socket / Pool for massive amounts of querying. This greatly improves performance on Windows, and offers better performance on Linux as well..</Description>
+    <Copyright>Florian Adler</Copyright>
+    <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
+    <PackageProjectUrl></PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Tyler-OBrien/Okolni-Source-Query-Pool</RepositoryUrl>
+    <RepositoryType>GitHub</RepositoryType>
+    <PackageReleaseNotes>
+		1.2.8 .net 8
+        1.2.7 .net 7
+	    1.2.6 Fix/remove unnecessary allocations, better cleanup of pool.
+	    1.2.5 Minor ASync Fixes/Optimizations, Add workaround to grab players from A2S_Players when over 255 players (i.e Rust)
+	    1.2.4 Remove The Ship Properties/Data
+	    1.2.3 Embed Retries in Responses
+	    1.2.2 Added various fixes to QueryConnectionPool, now accepting CancellationToken, Ipv6 Support, fixes for Windows networking, fixed query pool lock issues.
+	    1.2.1 Added QueryConnectionPool
+	    1.2.0 Added Async methods
+	    1.1.0 Added multipacket responses
+      1.0.1 Fixed bug that occured when the server returned a challenge instead of the response directly
+      1.0.0 Initial Fullrelease, fixed bug when calling functions repetetive
+      0.0.2 Rename to Okolni Source Query (instead of Okolni Source Engine Query)
+      0.0.1 Initial Release. Can use Source Engine Query but not multipacket or goldsource.
+    </PackageReleaseNotes>
+    <NeutralLanguage>en</NeutralLanguage>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <PackageId>Okolni.Source.Query.Pool</PackageId>
+    <FileVersion>1.2.8.0</FileVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ClrHeapAllocationAnalyzer" Version="3.0.0" />
+  </ItemGroup>
+
+</Project>

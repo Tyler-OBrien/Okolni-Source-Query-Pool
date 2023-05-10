@@ -128,7 +128,7 @@ public class UDPDeMultiplexer
 #endif
         Task delayTask = null;
         Task<SocketReceiveFromResult> udpClientReceiveTask = null;
-        Memory<byte> buffer = null;
+        byte[] buffer = new byte[65527];
 
         while (true)
         {
@@ -140,7 +140,6 @@ public class UDPDeMultiplexer
             // We might have timed out from the delayTask, but still are waiting for a new packet.
             if (udpClientReceiveTask == null || udpClientReceiveTask.IsCompleted)
             {
-                buffer = new byte[65527];
                 udpClientReceiveTask = socket.ReceiveFromAsync(buffer, SocketFlags.None, endPoint,
                     token).AsTask().HandleOperationCancelled();
             }
@@ -155,7 +154,8 @@ public class UDPDeMultiplexer
             if (udpClientReceiveTask.IsCompletedSuccessfully)
             {
                 var udpClientReceive = await udpClientReceiveTask;
-                buffer = buffer.Slice(0, udpClientReceive.ReceivedBytes);
+                var newBuffer = new byte[udpClientReceive.ReceivedBytes];
+                Buffer.BlockCopy(buffer, 0, newBuffer, 0, udpClientReceive.ReceivedBytes);
                 lock (mutex)
                 {
                     // Check if we have a queue created
@@ -164,7 +164,7 @@ public class UDPDeMultiplexer
                     {
 #if DEBUG
                         Console.WriteLine(
-                            $"Delivered packet to {udpClientReceive.RemoteEndPoint} - {Convert.ToBase64String(buffer.ToArray().Take(10).ToArray())}");
+                            $"Delivered packet to {udpClientReceive.RemoteEndPoint} - {Convert.ToBase64String(newBuffer.ToArray().Take(10).ToArray())}");
 #endif
                         // Check if we can dequeue an item
                         var shouldEnqueue = true;
@@ -180,7 +180,7 @@ public class UDPDeMultiplexer
                             {
                                 shouldEnqueue = false;
                                 demuxConnection.BufferDirty = true;
-                                demuxConnection.ReceiveFrom.SetResult(buffer);
+                                demuxConnection.ReceiveFrom.SetResult(newBuffer);
                                 RemoveIfEmpty(udpClientReceive.RemoteEndPoint, demuxConnections);
                             }
                         }
@@ -189,7 +189,7 @@ public class UDPDeMultiplexer
                         if (shouldEnqueue)
                         {
                             var tcs = new TaskCompletionSource<Memory<byte>>(TaskCreationOptions.RunContinuationsAsynchronously);
-                            tcs.SetResult(buffer);
+                            tcs.SetResult(newBuffer);
                             Enqueue(demuxConnections, new DemuxConnection(tcs, true, true));
                         }
                     }
@@ -198,10 +198,10 @@ public class UDPDeMultiplexer
                     {
 #if DEBUG
                         Console.WriteLine(
-                            $"Found nothing listening... on {udpClientReceive.RemoteEndPoint}, {Connections.Count} - {Convert.ToBase64String(buffer.ToArray().Take(10).ToArray())}");
+                            $"Found nothing listening... on {udpClientReceive.RemoteEndPoint}, {Connections.Count} - {Convert.ToBase64String(newBuffer.ToArray().Take(10).ToArray())}");
 #endif
                         var tcs = new TaskCompletionSource<Memory<byte>>(TaskCreationOptions.RunContinuationsAsynchronously);
-                        tcs.SetResult(buffer);
+                        tcs.SetResult(newBuffer);
 
                         var newDemuxConnections = new DemuxConnections();
                         Enqueue(newDemuxConnections, new DemuxConnection(tcs, true, true));
