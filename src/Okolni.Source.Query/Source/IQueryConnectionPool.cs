@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
 using System.Threading.Tasks;
 using Okolni.Source.Query.Responses;
 
@@ -104,4 +105,8 @@ public interface IQueryConnectionPool : IDisposable
     /// <exception cref="SocketException"></exception>
     /// <exception cref="TimeoutException"></exception>
     Task<RuleResponse> GetRulesAsync(IPEndPoint endpoint, int maxRetries = 10);
+
+
+    public Task DisposeAsync(int timeoutSeconds = 20) => DisposeAsync(CancellationToken.None, timeoutSeconds);
+    public Task DisposeAsync(CancellationToken token, int timeoutSeconds = 20);
 }

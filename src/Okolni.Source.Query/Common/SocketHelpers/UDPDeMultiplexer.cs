@@ -126,33 +126,46 @@ public class UDPDeMultiplexer
 #if DEBUG
         Console.WriteLine($"Starting up Demux Worker - {Environment.CurrentManagedThreadId}");
 #endif
-        Task delayTask = null;
+        Task delayTask = Task.Delay(500, token).HandleOperationCancelled();
         Task<SocketReceiveFromResult> udpClientReceiveTask = null;
+        ValueTask<SocketReceiveFromResult> udpClientReceiveValueTask = new ValueTask<SocketReceiveFromResult>();
         byte[] buffer = new byte[65527];
+        bool usedResponse = true;
+        bool cleanedUpResponses = true;
 
         while (true)
         {
             if (token.IsCancellationRequested)
             {
                 Cleanup();
-                break;
+                return;
             }
             // We might have timed out from the delayTask, but still are waiting for a new packet.
-            if (udpClientReceiveTask == null || udpClientReceiveTask.IsCompleted)
+            if (usedResponse)
             {
-                udpClientReceiveTask = socket.ReceiveFromAsync(buffer, SocketFlags.None, endPoint,
-                    token).AsTask().HandleOperationCancelled();
+                udpClientReceiveTask?.Dispose();
+                udpClientReceiveValueTask =
+                    socket.ReceiveFromAsync(buffer, SocketFlags.None, endPoint,
+                        token);
+                udpClientReceiveTask = udpClientReceiveValueTask.AsTask().HandleOperationCancelled();
+                usedResponse = false;
             }
 
+            if (udpClientReceiveValueTask.IsCompleted == false)
+            {
+                if (cleanedUpResponses)
+                {
+                    delayTask = Task.Delay(500, token).HandleOperationCancelled();
+                    cleanedUpResponses = false;
+                }
 
-            if (delayTask == null || delayTask.IsCompleted)
-                delayTask = Task.Delay(500, token).HandleOperationCancelled();
-
-            await Task.WhenAny(udpClientReceiveTask, delayTask);
+                await Task.WhenAny(udpClientReceiveTask, delayTask);
+            }
 
             // If there is a new packet to be recieved
             if (udpClientReceiveTask.IsCompletedSuccessfully)
             {
+                usedResponse = true;
                 var udpClientReceive = await udpClientReceiveTask;
                 var newBuffer = new byte[udpClientReceive.ReceivedBytes];
                 Buffer.BlockCopy(buffer, 0, newBuffer, 0, udpClientReceive.ReceivedBytes);
@@ -215,6 +228,7 @@ public class UDPDeMultiplexer
             if (delayTask.IsCompletedSuccessfully)
                 lock (mutex)
                 {
+                    cleanedUpResponses = true;
                     if (Connections.Keys.Any())
                         foreach (var keyPair in Connections.Keys.ToList())
                             if (Connections.TryGetValue(keyPair, out var demuxConnections))

@@ -180,12 +180,31 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
         }
     }
 
+    [Obsolete("Use Async Dispose")]
     public void Dispose()
     {
-        if (!m_cancellationTokenSource.IsCancellationRequested)
-            m_cancellationTokenSource?.Cancel();
+        if (m_cancellationTokenSource is { IsCancellationRequested: false })
+            m_cancellationTokenSource.Cancel();
         m_sharedSocket?.Dispose();
         m_cancellationTokenSource?.Dispose();
+    }
+
+    public Task DisposeAsync(int timeoutSeconds = 20) => DisposeAsync(CancellationToken.None, timeoutSeconds);
+    public async Task DisposeAsync(CancellationToken token, int timeoutSeconds = 20)
+    {
+        if (m_cancellationTokenSource is { IsCancellationRequested: false })
+            m_cancellationTokenSource.Cancel();
+        m_sharedSocket?.Dispose();
+        m_cancellationTokenSource?.Dispose();
+        try
+        {
+            await m_backgroundTask.WaitAsync(TimeSpan.FromSeconds(timeoutSeconds), token);
+        }
+        finally
+        {
+            m_backgroundTask.Dispose();
+        }
+        Message?.Invoke("Disposed pool..");
     }
 
 
