@@ -185,7 +185,6 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
     {
         if (m_cancellationTokenSource is { IsCancellationRequested: false })
             m_cancellationTokenSource.Cancel();
-        m_sharedSocket?.Dispose();
         m_cancellationTokenSource?.Dispose();
     }
 
@@ -194,7 +193,6 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
     {
         if (m_cancellationTokenSource is { IsCancellationRequested: false })
             m_cancellationTokenSource.Cancel();
-        m_sharedSocket?.Dispose();
         m_cancellationTokenSource?.Dispose();
         try
         {

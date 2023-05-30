@@ -138,6 +138,7 @@ public class UDPDeMultiplexer
             if (token.IsCancellationRequested)
             {
                 Cleanup();
+                socket?.Dispose();
                 return;
             }
             // We might have timed out from the delayTask, but still are waiting for a new packet.
@@ -151,7 +152,7 @@ public class UDPDeMultiplexer
                 usedResponse = false;
             }
 
-            if (udpClientReceiveValueTask.IsCompleted == false)
+            if (udpClientReceiveTask.IsCompleted == false)
             {
                 if (cleanedUpResponses)
                 {
