@@ -11,9 +11,9 @@ public class Program
 {
     private static async Task Main(string[] args)
     {
-        string Host = "83.137.228.99";
+        string Host = "168.100.162.254";
         int Port = 28015;
-        
+
         using IQueryConnection conn = new QueryConnection();
         conn.Host = Host;
         conn.Port = Port;
@@ -40,8 +40,8 @@ public class Program
         connPool.SendTimeout = 500;
         connPool.Setup();
         var serverEndpoint1 = new IPEndPoint(IPAddress.Parse(Host), Port);
-        var serverEndpoint2 = new IPEndPoint(IPAddress.Parse("202.165.126.235"), 2303);
-        var serverEndpoint3 = new IPEndPoint(IPAddress.Parse("46.174.54.84"), 27015);
+        var serverEndpoint2 = new IPEndPoint(IPAddress.Parse("104.143.3.125"), 28010);
+        var serverEndpoint3 = new IPEndPoint(IPAddress.Parse("64.40.8.96"), 28015);
         var serverEndpoint4 = new IPEndPoint(IPAddress.Parse("164.132.202.2"), 27018);
         var serverEndpoint5 = new IPEndPoint(IPAddress.Parse("173.199.107.143"), 7780);
 

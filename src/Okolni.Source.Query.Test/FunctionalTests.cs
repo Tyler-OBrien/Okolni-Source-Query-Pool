@@ -12,10 +12,9 @@ namespace Okolni.Source.Query.Test
     
     public class FunctionalTests
     {
-        [TestMethod]
         [DataRow("51.79.37.206", 2303)]
-        [DataRow("202.165.126.235", 2303)]
-        [DataRow("46.174.54.84", 27015)]
+        [DataRow("168.100.162.254", 28015)]
+        [DataRow("154.16.128.32", 28015)]
         [DataRow("164.132.202.2", 27018)]
         [DataRow("173.199.107.143", 7780)]
         [DataRow("216.52.148.47", 27015)]
@@ -41,8 +40,8 @@ namespace Okolni.Source.Query.Test
 
         [TestMethod]
         [DataRow("51.79.37.206", 2303)]
-        [DataRow("202.165.126.235", 2303)]
-        [DataRow("46.174.54.84", 27015)]
+        [DataRow("168.100.162.254", 28015)]
+        [DataRow("154.16.128.32", 28015)]
         [DataRow("164.132.202.2", 27018)]
         [DataRow("173.199.107.143", 7780)]
         [DataRow("216.52.148.47", 27015)]
@@ -72,8 +71,8 @@ namespace Okolni.Source.Query.Test
             connPool.SendTimeout = 5000;
             connPool.Setup();
             var serverEndpoint1 = new IPEndPoint(IPAddress.Parse("51.79.37.206"), 2303);
-            var serverEndpoint2 = new IPEndPoint(IPAddress.Parse("202.165.126.235"), 2303);
-            var serverEndpoint3 = new IPEndPoint(IPAddress.Parse("46.174.54.84"), 27015);
+            var serverEndpoint2 = new IPEndPoint(IPAddress.Parse("104.143.3.125"), 28010);
+            var serverEndpoint3 = new IPEndPoint(IPAddress.Parse("64.40.8.96"), 28015);
             var serverEndpoint4 = new IPEndPoint(IPAddress.Parse("164.132.202.2"), 27018);
             var serverEndpoint5 = new IPEndPoint(IPAddress.Parse("173.199.107.143"), 7780);
 
