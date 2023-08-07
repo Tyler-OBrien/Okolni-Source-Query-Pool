@@ -6,6 +6,10 @@ Some words of wisdom if you want to query thousands of servers to collect statis
 
 Games like Arma 3 use A2S_Rules for their mods, but not in a compatiable format, watch out for them. Games running on Gold Source (https://en.wikipedia.org/wiki/GoldSrc) are not supported by this library.  It's not safe to assume that each server on the server list is an actual unique server. I found a few servers that use different Query Ports on the same IP, but return the same Port (Game Port), so make sure you are identifying servers by IP/QueryPort and not IP/Port. Some servers block A2S_Rules/A2S_Players, and some games also do not support them. Some games like Post Scriptum return 0 for player count in A2S_Players and only return correct player count in A2S_Rules, and some games like Rust can have too many players. A2S_Players returns 'players', the amount of players on, as a byte, so a max of 255. Games treat this overflow differently, some return 255 if over 255 are on, Rust for example will just return the player count mod 255 (i.e 550 players on, will show 40). For those games, specifically Rust, you can get the full list of players from A2S_Players. This library supports over 255 players from A2S_Players, but beware the underlying A2S_Players response also has a player count which is a byte, so some libraries will only parse a max of 255 players even if there is more.
 
+# Edit 2023-08-07
+
+Another fun discovery I recently made was some Servers, right now it looks like Path.net DDoS Protected specifically (maybe related to their A2S Caching?) sometimes respond with non-challenge responses, but of the wrong type. It seems limited to responding to A2S_Rules and A2S_Players with A2S_Info Response headers. 1.4.0 includes a patch to properly retry in these cases, and I have verified retrying works fine, and the next request is usually right.
+
 ** Work in Progress **
 
 * Add pooling/batching, use a single UDP Socket to send and receive from many servers at once. On Windows, 512 queries at once seems to be stable. On Linux, 1024 is stable, but I haven't tried to push it past that.
