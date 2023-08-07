@@ -124,8 +124,10 @@ internal static class QueryHelper
     {
         try
         {
-            (var byteReader, var header, int retriesUsed) = await RequestDataFromServer(Constants.A2S_INFO_REQUEST, endPoint, socket, maxRetries,
-                sendTimeout, receiveTimeout);
+            await socket.Setup();
+            (var byteReader, var header, int retriesUsed) = await RequestDataFromServer(Constants.A2S_INFO_REQUEST,
+                endPoint, socket, maxRetries,
+                sendTimeout, receiveTimeout, Constants.A2S_INFO_RESPONSE);
 
             if (header == Constants.A2S_INFO_RESPONSE_GOLDSOURCE)
                 throw new ArgumentException("Obsolete GoldSource Response are not supported right now");
@@ -177,6 +179,10 @@ internal static class QueryHelper
         {
             throw new SourceQueryException($"Could not gather Info for {endPoint}", ex);
         }
+        finally
+        {
+            await socket.DisposeAsync();
+        }
     }
 
 
@@ -190,17 +196,21 @@ internal static class QueryHelper
     {
         try
         {
-            (var byteReader, var header, int retriesUsed) = await RequestDataFromServer(Constants.A2S_PLAYER_CHALLENGE_REQUEST, endPoint, socket,
-                maxRetries, sendTimeout, ReceiveTimeout, true);
+            await socket.Setup();
+            (var byteReader, var header, int retriesUsed) = await RequestDataFromServer(
+                Constants.A2S_PLAYER_CHALLENGE_REQUEST, endPoint, socket,
+                maxRetries, sendTimeout, ReceiveTimeout, Constants.A2S_PLAYER_RESPONSE, true);
 
-         
 
             if (!header.Equals(Constants.A2S_PLAYER_RESPONSE))
                 throw new ArgumentException("Response was no player response.");
 
-            var playerResponse = new PlayerResponse { Header = header, Retries = retriesUsed, Players = new List<Player>() };
+            var playerResponse = new PlayerResponse
+                { Header = header, Retries = retriesUsed, Players = new List<Player>() };
             int playercount = byteReader.GetByte();
-            while (byteReader.Remaining > 9) // Min player obj is 9 bytes.. playercount can't be trusted as it maxes out at 255, Rust & others can have more players.
+            while
+                (byteReader.Remaining >
+                 9) // Min player obj is 9 bytes.. playercount can't be trusted as it maxes out at 255, Rust & others can have more players.
                 playerResponse.Players.Add(new Player
                 {
                     Index = byteReader.GetByte(),
@@ -222,6 +232,10 @@ internal static class QueryHelper
         {
             throw new SourceQueryException($"Could not gather Players for {endPoint}", ex);
         }
+        finally
+        {
+            await socket.DisposeAsync();
+        }
     }
 
 
@@ -235,14 +249,17 @@ internal static class QueryHelper
     {
         try
         {
-            (var byteReader, var header, int retriesUsed) = await RequestDataFromServer(Constants.A2S_RULES_CHALLENGE_REQUEST, endPoint, socket,
-                maxRetries, sendTimeout, receiveTimeout, true);
+            await socket.Setup();
+            (var byteReader, var header, int retriesUsed) = await RequestDataFromServer(
+                Constants.A2S_RULES_CHALLENGE_REQUEST, endPoint, socket,
+                maxRetries, sendTimeout, receiveTimeout, Constants.A2S_RULES_RESPONSE, true);
 
 
             if (!header.Equals(Constants.A2S_RULES_RESPONSE))
                 throw new ArgumentException("Response was no rules response.");
 
-            var ruleResponse = new RuleResponse { Header = header, Retries = retriesUsed, Rules = new Dictionary<string, string>() };
+            var ruleResponse = new RuleResponse
+                { Header = header, Retries = retriesUsed, Rules = new Dictionary<string, string>() };
             int rulecount = byteReader.GetShort();
             for (var i = 1; i <= rulecount; i++) ruleResponse.Rules.Add(byteReader.GetString(), byteReader.GetString());
 
@@ -252,11 +269,16 @@ internal static class QueryHelper
         {
             throw new SourceQueryException($"Could not gather Rules for {endPoint}", ex);
         }
+        finally
+        {
+            await socket.DisposeAsync();
+        }
     }
 
     // This could do with some clean up
+    // headerWeWant was added specifically because, it looks like Path.net DDos Protected Servers (I'm thinking maybe their A2S Caching layer)? sometimes respond with A2S_INFO Replies to A2S_Player/A2S_Rules Queries...
     public static async Task<(IByteReader reader, byte header, int retriesUsed)> RequestDataFromServer(byte[] request,
-        IPEndPoint endPoint, ISocket socket, int maxRetries, int sendTimeout, int ReceiveTimeout,
+        IPEndPoint endPoint, ISocket socket, int maxRetries, int sendTimeout, int ReceiveTimeout, byte headerWeWant,
         bool replaceLastBytesInRequest = false)
     {
         var retries = 0;
@@ -272,7 +294,7 @@ internal static class QueryHelper
                 var header = byteReader.GetByte();
 
                 if (header == Constants
-                        .CHALLENGE_RESPONSE) // Header response is a challenge response so the challenge must be sent as well
+                        .CHALLENGE_RESPONSE || header != headerWeWant) // Header response is a challenge response so the challenge must be sent as well
                 {
                     do
                     {
@@ -289,13 +311,24 @@ internal static class QueryHelper
                         var retryResponse = await FetchResponse(endPoint, socket, ReceiveTimeout);
                         byteReader = retryResponse.GetByteReader();
                         header = byteReader.GetByte();
-                        if (header == Constants.CHALLENGE_RESPONSE)
+                        if (header == Constants.CHALLENGE_RESPONSE || header != headerWeWant)
                             retries++;
-                    } while (header == Constants.CHALLENGE_RESPONSE && retries < maxRetries);
+#if DEBUG
+                        if (header != headerWeWant && header != Constants.CHALLENGE_RESPONSE)
+                        {
+                            await Task.Delay(2000);
+                            Console.WriteLine($"We got back a non-challenge response for {endPoint}, but it was {header}, not {headerWeWant}");
+                        }
+#endif
+                    } while ((header == Constants.CHALLENGE_RESPONSE || header != headerWeWant) && retries < maxRetries);
 
                     if (header == Constants.CHALLENGE_RESPONSE)
                         throw new SourceQueryException(
                             $"Retry limit exceeded for the request.  Tried {retries} times, but couldn't get non-challenge packet.");
+
+                    if (header != headerWeWant)
+                        throw new SourceQueryException(
+                            $"Retry limit exceeded for the request.  Tried {retries} times, but we only got the wrong header of {header} when we wanted {headerWeWant}.");
                 }
 
 #if DEBUG
@@ -310,6 +343,9 @@ internal static class QueryHelper
             // Any timeout is just another signal to continue
             catch (TimeoutException)
             {
+#if DEBUG
+                Console.WriteLine($"Timeout for {endPoint}");
+#endif
                 /* Nom */
             }
             finally

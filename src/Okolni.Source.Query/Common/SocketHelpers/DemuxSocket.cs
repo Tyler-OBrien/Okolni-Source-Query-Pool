@@ -4,11 +4,12 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using Okolni.Source.Query.Pool.Common.SocketHelpers;
 using Okolni.Source.Query.Source;
 
 namespace Okolni.Source.Query.Common.SocketHelpers;
 
-public class DemuxSocket : ISocket
+public class DemuxSocket
 {
     private readonly UDPDeMultiplexer m_udpDeMultiplexer;
     private readonly Socket m_socket;
@@ -51,20 +52,23 @@ public class DemuxSocket : ISocket
         Console.WriteLine($"Sending  {Convert.ToBase64String(buffer.ToArray().Take(10).ToArray())} to {remoteEP}");
 #endif
         m_sendCallBack?.Invoke();
-        lock (m_socket)
-        {
-            return m_socket.SendToAsync(buffer, socketFlags, remoteEP, cancellationToken);
-        }
+        return m_socket.SendToAsync(buffer, socketFlags, remoteEP, cancellationToken);
     }
 
 
-    /// <inheritdoc />
-    public async ValueTask<Memory<byte>> ReceiveFromAsync(
-        SocketFlags socketFlags,
-        EndPoint remoteEndPoint,
-        CancellationToken cancellationToken = default)
+
+
+    public async ValueTask AddListener(IPEndPoint endPoint, DemuxSocketWrapper wrapper)
     {
-        m_receiveCallback?.Invoke();
-        return await m_udpDeMultiplexer.ReceiveAsync(socketFlags, remoteEndPoint, m_socket, cancellationToken);
+        if (m_udpDeMultiplexer.Connections.ContainsKey(endPoint))
+            throw new InvalidOperationException("Only one listener per endpoint active at one time...");
+
+        m_udpDeMultiplexer.Connections[endPoint] = wrapper;
+    }
+
+    public async ValueTask RemoveListener(IPEndPoint endPoint)
+    {
+        if (m_udpDeMultiplexer.Connections.TryRemove(endPoint, out _) == false)
+            throw new InvalidOperationException("Failed to remove endpoint listener, already gone?");
     }
 }

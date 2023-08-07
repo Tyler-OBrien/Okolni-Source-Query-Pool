@@ -13,6 +13,8 @@ public class SocketWrapper : ISocket
     public SocketWrapper(Socket socket)
     {
         m_socket = socket;
+        m_socket.ReceiveTimeout = 5000;
+        m_socket.SendTimeout = 5000;
     }
 
     /// <inheritdoc />
@@ -35,5 +37,14 @@ public class SocketWrapper : ISocket
         Memory<byte> buffer = new byte[65527];
         var response = await m_socket.ReceiveFromAsync(buffer, socketFlags, remoteEndPoint, cancellationToken);
         return buffer.Slice(0, response.ReceivedBytes);
+    }
+
+    // Not useful for this...
+    public async ValueTask Setup()
+    {
+    }
+
+    public async ValueTask DisposeAsync()
+    {
     }
 }

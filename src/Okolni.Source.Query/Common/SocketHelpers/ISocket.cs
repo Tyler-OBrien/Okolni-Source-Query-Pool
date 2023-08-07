@@ -8,6 +8,11 @@ namespace Okolni.Source.Query.Common.SocketHelpers;
 
 public interface ISocket
 {
+
+    public ValueTask Setup();
+    public ValueTask DisposeAsync();
+
+
     /// <summary>Sends data to the specified remote host.</summary>
     /// <param name="buffer">The buffer for the data to send.</param>
     /// <param name="socketFlags">A bitwise combination of SocketFlags values that will be used when sending the data.</param>

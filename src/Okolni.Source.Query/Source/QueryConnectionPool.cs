@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Okolni.Source.Common;
 using Okolni.Source.Query.Common;
 using Okolni.Source.Query.Common.SocketHelpers;
+using Okolni.Source.Query.Pool.Common.SocketHelpers;
 using Okolni.Source.Query.Responses;
 
 namespace Okolni.Source.Query.Source;
@@ -112,7 +113,7 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
         try
         {
             Interlocked.Increment(ref _running);
-            return await QueryHelper.GetInfoAsync(endpoint, m_socket, SendTimeout, ReceiveTimeout, maxRetries);
+            return await QueryHelper.GetInfoAsync(endpoint, NewSocket(endpoint), SendTimeout, ReceiveTimeout, maxRetries);
         }
         finally
         {
@@ -142,7 +143,7 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
         try
         {
             Interlocked.Increment(ref _running);
-            return await QueryHelper.GetPlayersAsync(endpoint, m_socket, SendTimeout, ReceiveTimeout, maxRetries);
+            return await QueryHelper.GetPlayersAsync(endpoint, NewSocket(endpoint), SendTimeout, ReceiveTimeout, maxRetries);
         }
         finally
         {
@@ -172,7 +173,7 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
         try
         {
             Interlocked.Increment(ref _running);
-            return await QueryHelper.GetRulesAsync(endpoint, m_socket, SendTimeout, ReceiveTimeout, maxRetries);
+            return await QueryHelper.GetRulesAsync(endpoint, NewSocket(endpoint), SendTimeout, ReceiveTimeout, maxRetries);
         }
         finally
         {
@@ -203,6 +204,11 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
             m_backgroundTask.Dispose();
         }
         Message?.Invoke("Disposed pool..");
+    }
+
+    public DemuxSocketWrapper NewSocket(IPEndPoint endPoint)
+    {
+        return new DemuxSocketWrapper(m_socket, endPoint);
     }
 
 
