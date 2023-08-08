@@ -55,20 +55,23 @@ public class DemuxSocket
         return m_socket.SendToAsync(buffer, socketFlags, remoteEP, cancellationToken);
     }
 
-
-
-
-    public async ValueTask AddListener(IPEndPoint endPoint, DemuxSocketWrapper wrapper)
+    public ValueTask<Memory<byte>> ReceiveFromAsync(DemuxSocketWrapper socketWrapper, SocketFlags socketFlags, EndPoint remoteEndPoint,
+        CancellationToken cancellationToken = default)
     {
-        if (m_udpDeMultiplexer.Connections.ContainsKey(endPoint))
-            throw new InvalidOperationException("Only one listener per endpoint active at one time...");
-
-        m_udpDeMultiplexer.Connections[endPoint] = wrapper;
+        return m_udpDeMultiplexer.ReceiveFromAsync(socketWrapper, socketFlags, remoteEndPoint, cancellationToken);
     }
 
-    public async ValueTask RemoveListener(IPEndPoint endPoint)
+
+
+    public ValueTask AddListener(IPEndPoint endPoint, DemuxSocketWrapper wrapper)
     {
-        if (m_udpDeMultiplexer.Connections.TryRemove(endPoint, out _) == false)
-            throw new InvalidOperationException("Failed to remove endpoint listener, already gone?");
+        m_udpDeMultiplexer.AddListener(endPoint, wrapper);
+        return ValueTask.CompletedTask; 
+    }
+
+    public ValueTask RemoveListener(IPEndPoint endPoint)
+    {
+        m_udpDeMultiplexer.RemoveListener(endPoint);
+        return ValueTask.CompletedTask;
     }
 }

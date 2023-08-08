@@ -21,7 +21,6 @@ namespace Okolni.Source.Query.Pool.Common.SocketHelpers
 
         public Queue<Memory<byte>> Queue { get; private set; } =  new Queue<Memory<byte>>();
 
-        public SemaphoreSlim SempahoreSlim = new SemaphoreSlim(1, 1);
         public DemuxSocketWrapper(DemuxSocket demuxSocket, IPEndPoint endPoint)
         {
             if (endPoint is IPEndPoint ipEndpoint) ipEndpoint.Address = ipEndpoint.Address.MapToIPv6();
@@ -35,48 +34,10 @@ namespace Okolni.Source.Query.Pool.Common.SocketHelpers
             return await _demuxSocket.SendToAsync(buffer, socketFlags, remoteEP, cancellationToken);
         }
 
-        public async ValueTask<Memory<byte>> ReceiveFromAsync(SocketFlags socketFlags, EndPoint remoteEndPoint,
+        public ValueTask<Memory<byte>> ReceiveFromAsync(SocketFlags socketFlags, EndPoint remoteEndPoint,
             CancellationToken cancellationToken = default)
         {
-            Task<Memory<byte>> newTask = null;
-            await SempahoreSlim.WaitAsync(cancellationToken);
-            try
-            {
-                if (Queue.TryDequeue(out var result))
-                {
-#if DEBUG
-                    Console.WriteLine($"Received Packet from Queue for {remoteEndPoint}");
-#endif
-                    return result;
-                }
-
-                if (ReceiveFrom is { Task.IsCompleted: false })
-                    ReceiveFrom.TrySetException(
-                        new OperationCanceledException(
-                            "Cancelled due to another ReceiveFrom being queued for this SocketWrapper"));
-
-                CancellationToken = cancellationToken;
-                ReceiveFrom =
-                    new TaskCompletionSource<Memory<byte>>(TaskCreationOptions.RunContinuationsAsynchronously);
-                newTask = ReceiveFrom.Task;
-#if DEBUG
-                Console.WriteLine($"Starting Task for receiving Packet from {remoteEndPoint}");
-#endif
-            }
-            finally
-            {
-                SempahoreSlim.Release();
-            }
-
-            try
-            {
-                return await new ValueTask<Memory<byte>>(newTask);
-            }
-            finally
-            {
-                ReceiveFrom = null;
-                CancellationToken = CancellationToken.None;
-            }
+            return _demuxSocket.ReceiveFromAsync(this, socketFlags, remoteEndPoint, cancellationToken);
         }
 
         public async ValueTask Setup()

@@ -1,12 +1,11 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Okolni.Source.Query.Pool.Common.SocketHelpers;
+using Okolni.Source.Query.Source;
 
 namespace Okolni.Source.Query.Common.SocketHelpers;
 
@@ -20,10 +19,17 @@ namespace Okolni.Source.Query.Common.SocketHelpers;
 
 public class UDPDeMultiplexer
 {
-    public readonly ConcurrentDictionary<EndPoint, DemuxSocketWrapper> Connections = new();
+    private readonly Dictionary<EndPoint, DemuxSocketWrapper> Connections = new();
+
+    public SpinLock _spinLock;
 
 
     private int _waitingConnections;
+
+    public event IQueryConnectionPool.PoolError Error;
+
+    /// <inheritdoc />
+    public event IQueryConnectionPool.PoolMessage Message;
 
 
     public async Task Start(Socket socket, IPEndPoint endPoint, CancellationToken token)
@@ -31,12 +37,13 @@ public class UDPDeMultiplexer
 #if DEBUG
         Console.WriteLine($"Starting up Demux Worker - {Environment.CurrentManagedThreadId}");
 #endif
-        Task delayTask = Task.Delay(500, token).HandleOperationCancelled();
+        var delayTask = Task.Delay(500, token).HandleOperationCancelled();
         Task<SocketReceiveFromResult> udpClientReceiveTask = null;
-        ValueTask<SocketReceiveFromResult> udpClientReceiveValueTask = new ValueTask<SocketReceiveFromResult>();
-        byte[] buffer = new byte[65527];
-        bool usedResponse = true;
-        bool cleanedUpResponses = true;
+        var udpClientReceiveValueTask = new ValueTask<SocketReceiveFromResult>();
+        var buffer = new byte[65527];
+        var usedResponse = true;
+        var cleanedUpResponses = true;
+        var gotLock = false;
 
         while (true)
         {
@@ -76,87 +83,86 @@ public class UDPDeMultiplexer
                 var udpClientReceive = await udpClientReceiveTask;
                 var newBuffer = new byte[udpClientReceive.ReceivedBytes];
                 Buffer.BlockCopy(buffer, 0, newBuffer, 0, udpClientReceive.ReceivedBytes);
-
-                // Check if we have a queue created
-                if (Connections.TryGetValue(udpClientReceive.RemoteEndPoint,
-                        out var demuxConnections))
+                gotLock = false;
+                _spinLock.Enter(ref gotLock);
+                try
                 {
-
-                    if (await demuxConnections.SempahoreSlim.WaitAsync(1000))
+                    // Check if we have a queue created
+                    if (Connections.TryGetValue(udpClientReceive.RemoteEndPoint,
+                            out var demuxConnections))
                     {
-                        try
                         {
+                            try
+                            {
 #if DEBUG
                             Console.WriteLine(
                                 $"Delivered packet to {udpClientReceive.RemoteEndPoint} - {Convert.ToBase64String(newBuffer.ToArray().Take(10).ToArray())}");
 #endif
 
-                            if (demuxConnections.ReceiveFrom != null &&
-                                demuxConnections.ReceiveFrom.Task.IsCompletedSuccessfully == false)
-                            {
-                                demuxConnections.ReceiveFrom.SetResult(newBuffer);
+                                if (demuxConnections.ReceiveFrom != null &&
+                                    demuxConnections.ReceiveFrom.Task.IsCompletedSuccessfully == false)
+                                {
+                                    demuxConnections.ReceiveFrom.SetResult(newBuffer);
+                                }
+                                else
+                                {
+                                    demuxConnections.Queue.Enqueue(newBuffer);
+                                }
                             }
-                            else
+                            catch (Exception ex)
                             {
-                                demuxConnections.Queue.Enqueue(newBuffer);
+                                Error?.Invoke(ex);
                             }
-                        }
-                        finally
-                        {
-                            demuxConnections.SempahoreSlim.Release();
                         }
                     }
+                    // This endpoint isn't registered yet
                     else
                     {
-#if DEBUG
-                        Console.WriteLine($"Warn: Could not acquire log for {udpClientReceive.RemoteEndPoint}");
-#endif
-                    }
-                }
-                // This endpoint isn't registered yet
-                else
-                {
 #if DEBUG
                     Console.WriteLine(
                         $"Found nothing listening... on {udpClientReceive.RemoteEndPoint}, {Connections.Count} - {Convert.ToBase64String(newBuffer.ToArray().Take(10).ToArray())}");
 #endif
-
+                    }
+                }
+                finally
+                {
+                    if (gotLock)
+                        _spinLock.Exit();
                 }
             }
 
+            gotLock = false;
 
             if (delayTask.IsCompletedSuccessfully)
                 cleanedUpResponses = true;
-            if (Connections.Keys.Any())
-                foreach (var keyPair in Connections.Keys.ToList())
-                    if (Connections.TryGetValue(keyPair, out var demuxConnections))
+            _spinLock.Enter(ref gotLock);
+            try
+            {
+                foreach (var keyPair in Connections)
+                    try
                     {
-                        if (await demuxConnections.SempahoreSlim.WaitAsync(1000))
+                        var demuxConnections = keyPair.Value;
+                        if (demuxConnections.ReceiveFrom != null &&
+                            demuxConnections.ReceiveFrom.Task.IsCompleted == false &&
+                            demuxConnections.CancellationToken != CancellationToken.None &&
+                            demuxConnections.CancellationToken.IsCancellationRequested)
                         {
-                            try
-                            {
-                                if (demuxConnections.ReceiveFrom != null && demuxConnections.ReceiveFrom.Task.IsCompleted == false && demuxConnections.CancellationToken != CancellationToken.None &&
-                                    demuxConnections.CancellationToken.IsCancellationRequested)
-                                {
 #if DEBUG
                                     Console.WriteLine($"Timed out waiting packet from {keyPair}");
 #endif
-                                    demuxConnections.ReceiveFrom.TrySetException(
-                                        new OperationCanceledException("Operation timed out"));
-                                }
-                            }
-                            finally
-                            {
-                                demuxConnections.SempahoreSlim.Release();
-                            }
-                        }
-                        else
-                        {
-#if DEBUG
-                            Console.WriteLine($"Failed acquiring lock for {keyPair} after 1000ms");
-#endif
+                            demuxConnections.ReceiveFrom.TrySetException(
+                                new OperationCanceledException("Operation timed out"));
                         }
                     }
+                    catch (Exception ex)
+                    {
+                        Error?.Invoke(ex);
+                    }
+            }
+            finally
+            {
+                if (gotLock) _spinLock.Exit();
+            }
         }
     }
 
@@ -168,32 +174,108 @@ public class UDPDeMultiplexer
 
     private async ValueTask Cleanup()
     {
-        if (Connections.Keys.Any())
-            foreach (var keyPair in Connections.Keys.ToList())
-                if (Connections.TryGetValue(keyPair, out var demuxConnections))
+        var gotLock = false;
+        _spinLock.Enter(ref gotLock);
+        try
+        {
+            foreach (var keyPair in Connections)
+                try
                 {
-                    if (await demuxConnections.SempahoreSlim.WaitAsync(500))
-                    {
-                        try
-                        {
-                            if (demuxConnections.ReceiveFrom != null && demuxConnections.ReceiveFrom.Task.IsCompleted == false)
-                                demuxConnections.ReceiveFrom.TrySetException(
-                                    new OperationCanceledException(
-                                        "Operation was cancelled by the pool being disposed"));
-                        }
-                        finally
-                        {
-                            demuxConnections.SempahoreSlim.Release();
-                        }
-                    }
-                    else
-                    {
-#if DEBUG
-                        Console.WriteLine($"Failed acquiring lock for {keyPair} after 500ms for cleanup");
-#endif
-                    }
+                    var demuxConnections = keyPair.Value;
+                    if (demuxConnections.ReceiveFrom != null &&
+                        demuxConnections.ReceiveFrom.Task.IsCompleted == false)
+                        demuxConnections.ReceiveFrom.TrySetException(
+                            new OperationCanceledException(
+                                "Operation was cancelled by the pool being disposed"));
+                }
+                catch (Exception ex)
+                {
+                    Error?.Invoke(ex);
                 }
 
-        Connections.Clear();
+            Connections.Clear();
+        }
+        finally
+        {
+            if (gotLock) _spinLock.Exit();
+        }
+    }
+
+    public async ValueTask<Memory<byte>> ReceiveFromAsync(DemuxSocketWrapper socketWrapper, SocketFlags socketFlags,
+        EndPoint remoteEndPoint,
+        CancellationToken cancellationToken = default)
+    {
+        Task<Memory<byte>> newTask = null;
+        var tryEnter = false;
+        _spinLock.Enter(ref tryEnter);
+        try
+        {
+            if (socketWrapper.Queue.TryDequeue(out var result))
+            {
+#if DEBUG
+                    Console.WriteLine($"Received Packet from Queue for {remoteEndPoint}");
+#endif
+                return result;
+            }
+
+            if (socketWrapper.ReceiveFrom is { Task.IsCompleted: false })
+                socketWrapper.ReceiveFrom.TrySetException(
+                    new OperationCanceledException(
+                        "Cancelled due to another ReceiveFrom being queued for this SocketWrapper"));
+
+            socketWrapper.CancellationToken = cancellationToken;
+            socketWrapper.ReceiveFrom =
+                new TaskCompletionSource<Memory<byte>>(TaskCreationOptions.RunContinuationsAsynchronously);
+            newTask = socketWrapper.ReceiveFrom.Task;
+#if DEBUG
+                Console.WriteLine($"Starting Task for receiving Packet from {remoteEndPoint}");
+#endif
+        }
+        finally
+        {
+            if (tryEnter) _spinLock.Exit();
+        }
+
+        try
+        {
+            return await new ValueTask<Memory<byte>>(newTask);
+        }
+        finally
+        {
+            socketWrapper.ReceiveFrom = null;
+            socketWrapper.CancellationToken = CancellationToken.None;
+        }
+    }
+
+    public void AddListener(IPEndPoint endPoint, DemuxSocketWrapper wrapper)
+    {
+        var gotLock = false;
+        _spinLock.Enter(ref gotLock);
+        try
+        {
+            if (Connections.ContainsKey(endPoint))
+                throw new InvalidOperationException("Only one listener per endpoint active at one time...");
+
+            Connections[endPoint] = wrapper;
+        }
+        finally
+        {
+            if (gotLock) _spinLock.Exit();
+        }
+    }
+
+    public void RemoveListener(IPEndPoint endPoint)
+    {
+        var gotLock = false;
+        _spinLock.Enter(ref gotLock);
+        try
+        {
+            if (Connections.Remove(endPoint) == false)
+                throw new InvalidOperationException("Failed to remove endpoint listener, already gone?");
+        }
+        finally
+        {
+            if (gotLock) _spinLock.Exit();
+        }
     }
 }

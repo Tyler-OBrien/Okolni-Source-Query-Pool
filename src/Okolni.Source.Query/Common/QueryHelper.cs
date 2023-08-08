@@ -316,7 +316,6 @@ internal static class QueryHelper
 #if DEBUG
                         if (header != headerWeWant && header != Constants.CHALLENGE_RESPONSE)
                         {
-                            await Task.Delay(2000);
                             Console.WriteLine($"We got back a non-challenge response for {endPoint}, but it was {header}, not {headerWeWant}");
                         }
 #endif

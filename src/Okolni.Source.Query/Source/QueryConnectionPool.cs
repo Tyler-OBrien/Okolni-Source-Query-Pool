@@ -62,6 +62,9 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
         }
 
         m_demultiplexer = new UDPDeMultiplexer();
+        // lazy passthrough
+        m_demultiplexer.Error += exception => Error?.Invoke(exception);
+        m_demultiplexer.Message += message => Message?.Invoke(message);
 
         if (delayInit == false) Init();
     }
