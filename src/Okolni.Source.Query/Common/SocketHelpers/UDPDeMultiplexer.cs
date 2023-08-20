@@ -21,7 +21,7 @@ public class UDPDeMultiplexer
 {
     private readonly Dictionary<EndPoint, DemuxSocketWrapper> Connections = new();
 
-    public SpinLock _spinLock;
+    private object _lock = new object();
 
 
     private int _waitingConnections;
@@ -84,10 +84,8 @@ public class UDPDeMultiplexer
                 var newBuffer = new byte[udpClientReceive.ReceivedBytes];
                 Buffer.BlockCopy(buffer, 0, newBuffer, 0, udpClientReceive.ReceivedBytes);
                 gotLock = false;
-                _spinLock.Enter(ref gotLock);
-                try
+                lock (_lock)
                 {
-                    // Check if we have a queue created
                     if (Connections.TryGetValue(udpClientReceive.RemoteEndPoint,
                             out var demuxConnections))
                     {
@@ -124,19 +122,13 @@ public class UDPDeMultiplexer
 #endif
                     }
                 }
-                finally
-                {
-                    if (gotLock)
-                        _spinLock.Exit();
-                }
             }
 
             gotLock = false;
 
             if (delayTask.IsCompletedSuccessfully)
                 cleanedUpResponses = true;
-            _spinLock.Enter(ref gotLock);
-            try
+            lock(_lock)
             {
                 foreach (var keyPair in Connections)
                     try
@@ -159,10 +151,6 @@ public class UDPDeMultiplexer
                         Error?.Invoke(ex);
                     }
             }
-            finally
-            {
-                if (gotLock) _spinLock.Exit();
-            }
         }
     }
 
@@ -174,9 +162,7 @@ public class UDPDeMultiplexer
 
     private async ValueTask Cleanup()
     {
-        var gotLock = false;
-        _spinLock.Enter(ref gotLock);
-        try
+        lock(_lock)
         {
             foreach (var keyPair in Connections)
                 try
@@ -195,10 +181,6 @@ public class UDPDeMultiplexer
 
             Connections.Clear();
         }
-        finally
-        {
-            if (gotLock) _spinLock.Exit();
-        }
     }
 
     public async ValueTask<Memory<byte>> ReceiveFromAsync(DemuxSocketWrapper socketWrapper, SocketFlags socketFlags,
@@ -207,8 +189,7 @@ public class UDPDeMultiplexer
     {
         Task<Memory<byte>> newTask = null;
         var tryEnter = false;
-        _spinLock.Enter(ref tryEnter);
-        try
+        lock(_lock)
         {
             if (socketWrapper.Queue.TryDequeue(out var result))
             {
@@ -231,10 +212,6 @@ public class UDPDeMultiplexer
                 Console.WriteLine($"Starting Task for receiving Packet from {remoteEndPoint}");
 #endif
         }
-        finally
-        {
-            if (tryEnter) _spinLock.Exit();
-        }
 
         try
         {
@@ -249,33 +226,21 @@ public class UDPDeMultiplexer
 
     public void AddListener(IPEndPoint endPoint, DemuxSocketWrapper wrapper)
     {
-        var gotLock = false;
-        _spinLock.Enter(ref gotLock);
-        try
+        lock(_lock)
         {
             if (Connections.ContainsKey(endPoint))
                 throw new InvalidOperationException("Only one listener per endpoint active at one time...");
 
             Connections[endPoint] = wrapper;
         }
-        finally
-        {
-            if (gotLock) _spinLock.Exit();
-        }
     }
 
     public void RemoveListener(IPEndPoint endPoint)
     {
-        var gotLock = false;
-        _spinLock.Enter(ref gotLock);
-        try
+        lock(_lock)
         {
             if (Connections.Remove(endPoint) == false)
                 throw new InvalidOperationException("Failed to remove endpoint listener, already gone?");
-        }
-        finally
-        {
-            if (gotLock) _spinLock.Exit();
         }
     }
 }
