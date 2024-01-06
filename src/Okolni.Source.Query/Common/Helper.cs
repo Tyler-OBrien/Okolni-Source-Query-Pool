@@ -21,49 +21,6 @@ namespace Okolni.Source.Common
         {
             return data.Slice(index, length);
         }
-        /// <summary>
-        /// Gets a subarray specified by the index and the length
-        /// </summary>
-        /// <param name="data">The array to get the subarray from</param>
-        /// <param name="index">The index from where to get the subarray</param>
-        /// <param name="length">The length of the subarray to extract</param>
-        /// <typeparam name="T">The generic type of the array</typeparam>
-        /// <returns>The sub array</returns>
-        public static T[] SubArray<T>(this T[] data, int index, int length)
-        {
-            T[] result = new T[length];
-            Array.Copy(data, index, result, 0, length);
-            return result;
-        }
-
-
-        /// <summary>
-        /// Inserts an array into another array
-        /// </summary>
-        /// <param name="data">the array to insert</param>
-        /// <param name="index">the index at which the array should be inserted</param>
-        /// <param name="arrayToInsert">the array to insert</param>
-        /// <typeparam name="T">The generic type of the array</typeparam>
-        /// <returns>the original array with the inserted one</returns>
-        public static T[] InsertArray<T>(this T[] data, int index, T[] arrayToInsert)
-        {
-            int maxlength = data.Length - index;
-            if (arrayToInsert.Length > maxlength)
-                arrayToInsert = arrayToInsert.SubArray(0, arrayToInsert.Length - maxlength);
-            Array.Copy(arrayToInsert, 0, data, index, arrayToInsert.Length);
-            return data;
-        }
-
-        public static void AppendToArray<T>(ref T[] data, T[] arrayToAppend)
-        {
-            int i = data.Length;
-            Array.Resize(ref data, data.Length + arrayToAppend.Length);
-            for (int j = 0; j < arrayToAppend.Length; j++)
-            {
-                data[i] = arrayToAppend[j];
-                i++;
-            }
-        }
 
         public static int GetNextNullCharPosition(this Memory<byte> data, int startindex)
         {
@@ -79,6 +36,14 @@ namespace Okolni.Source.Common
         public static IByteReader GetByteReader(this byte[] data)
         {
             return new ByteReader(data);
+        }
+        public static IByteReader GetByteReader(this Memory<byte> data, byte[] underlyingArray)
+        {
+            return new ByteReader(underlyingArray, data);
+        }
+        public static IByteReader GetByteReader(this Tuple<Memory<byte>, byte[]> response)
+        {
+            return new ByteReader(response.Item2, response.Item1);
         }
 
         public static ServerType ToServerType(this byte data)

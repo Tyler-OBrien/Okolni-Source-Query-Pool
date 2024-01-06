@@ -5,7 +5,7 @@ namespace Okolni.Source.Common.ByteHelper
     /// <summary>
     /// A byte reader to help read the byte response
     /// </summary>
-    public interface IByteReader
+    public interface IByteReader : IDisposable
     {
         /// <summary>
         /// The byte response
@@ -28,7 +28,7 @@ namespace Okolni.Source.Common.ByteHelper
         /// </summary>
         /// <param name="length">the length of the byte array to gather</param>
         /// <returns>The byte array extracted from the response</returns>
-        byte[] GetBytes(int length);
+        ReadOnlyMemory<byte> GetBytes(int length);
 
         /// <summary>
         /// Gets the next byte in the response
@@ -94,6 +94,6 @@ namespace Okolni.Source.Common.ByteHelper
         /// </summary>
         /// <param name="iterator">a custom iterator position</param>
         /// <returns>a byte array containing the remaining bytes in the response</returns>
-        byte[] GetRemaining(int? iterator = null);
+        Memory<byte> GetRemaining(int? iterator = null);
     }
 }

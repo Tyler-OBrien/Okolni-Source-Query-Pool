@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Okolni.Source.Query.Pool.Common;
+using System;
+using System.Buffers;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -29,14 +31,17 @@ public class SocketWrapper : ISocket
 
 
     /// <inheritdoc />
-    public async ValueTask<Memory<byte>> ReceiveFromAsync(
+    public async ValueTask<byte[]> ReceiveFromAsync(
         SocketFlags socketFlags,
         EndPoint remoteEndPoint,
         CancellationToken cancellationToken = default)
     {
-        Memory<byte> buffer = new byte[65527];
+        var buffer = ArrayPoolInterface.Rent(65527);
         var response = await m_socket.ReceiveFromAsync(buffer, socketFlags, remoteEndPoint, cancellationToken);
-        return buffer.Slice(0, response.ReceivedBytes);
+        var newBuffer = ArrayPoolInterface.Rent(response.ReceivedBytes);
+        Buffer.BlockCopy(buffer, 0, newBuffer, 0, response.ReceivedBytes);
+        ArrayPoolInterface.Return(buffer);
+        return newBuffer;
     }
 
     // Not useful for this...

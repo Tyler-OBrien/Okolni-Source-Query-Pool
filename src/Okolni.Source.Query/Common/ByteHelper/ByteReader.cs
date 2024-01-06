@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Okolni.Source.Query.Pool.Common;
+using System;
+using System.Buffers;
 using System.Text;
 
 namespace Okolni.Source.Common.ByteHelper
@@ -7,24 +9,11 @@ namespace Okolni.Source.Common.ByteHelper
     public class ByteReader : IByteReader
     {
         private int _iterator = 0;
-        private Memory<byte>? _response;
 
         /// <inheritdoc/>
-        public Memory<byte> Response
-        {
-            get
-            {
-                if (_response.HasValue == false)
-                    throw new ArgumentNullException("Response has to be set in order to get values from it");
+        public Memory<byte> Response { get; set; }
 
-                return _response.Value;
-            }
-            set
-            {
-                _response = value;
-                Iterator = 0;
-            }
-        }
+        private readonly byte[] _underlyingArray;
 
         /// <inheritdoc/>
         public int Iterator
@@ -57,10 +46,16 @@ namespace Okolni.Source.Common.ByteHelper
         public ByteReader(byte[] response)
         {
             Response = response;
+            _underlyingArray = response;
+        }
+        public ByteReader(byte[] underlyingArray, Memory<byte> response)
+        {
+            Response = response;
+            _underlyingArray = underlyingArray;
         }
 
         /// <inheritdoc/>
-        public byte[] GetBytes(int length)
+        public ReadOnlyMemory<byte> GetBytes(int length)
         {
             if (length <= 0)
                 throw new ArgumentOutOfRangeException("The Length must be at least 1");
@@ -69,7 +64,7 @@ namespace Okolni.Source.Common.ByteHelper
 
             var val = Response.SubArray(Iterator, length);
             Iterator += length;
-            return val.ToArray();
+            return val;
         }
 
         /// <inheritdoc/>
@@ -189,7 +184,7 @@ namespace Okolni.Source.Common.ByteHelper
         }
 
         /// <inheritdoc/>
-        public byte[] GetRemaining(int? iterator = null)
+        public Memory<byte> GetRemaining(int? iterator = null)
         {
             if (iterator == null)
                 iterator = Iterator;
@@ -197,7 +192,17 @@ namespace Okolni.Source.Common.ByteHelper
             if (Remaining < 1)
                 throw new ArgumentOutOfRangeException("Not Enough bytes left to read");
 
-            return Response.Slice(iterator.Value).ToArray();
+            return Response.Slice(iterator.Value);
+        }
+
+        private bool _disposed;
+        public void Dispose()
+        {
+            if (_disposed == false) 
+            {
+                ArrayPoolInterface.Return(_underlyingArray);
+                _disposed = true;
+            }
         }
     }
 }

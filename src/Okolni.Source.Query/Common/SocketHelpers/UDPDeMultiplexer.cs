@@ -1,9 +1,13 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Okolni.Source.Query.Pool.Common;
 using Okolni.Source.Query.Pool.Common.SocketHelpers;
 using Okolni.Source.Query.Source;
 
@@ -23,6 +27,8 @@ public class UDPDeMultiplexer
 
     private object _lock = new object();
 
+    private byte[] _buffer;
+
 
     private int _waitingConnections;
 
@@ -40,7 +46,7 @@ public class UDPDeMultiplexer
         var delayTask = Task.Delay(500, token).HandleOperationCancelled();
         Task<SocketReceiveFromResult> udpClientReceiveTask = null;
         var udpClientReceiveValueTask = new ValueTask<SocketReceiveFromResult>();
-        var buffer = new byte[65527];
+        _buffer  = GC.AllocateArray<byte>(length: 65527, pinned: true);
         var usedResponse = true;
         var cleanedUpResponses = true;
         var gotLock = false;
@@ -59,7 +65,7 @@ public class UDPDeMultiplexer
             {
                 udpClientReceiveTask?.Dispose();
                 udpClientReceiveValueTask =
-                    socket.ReceiveFromAsync(buffer, SocketFlags.None, endPoint,
+                    socket.ReceiveFromAsync(_buffer, SocketFlags.None, endPoint,
                         token);
                 udpClientReceiveTask = udpClientReceiveValueTask.AsTask().HandleOperationCancelled();
                 usedResponse = false;
@@ -81,8 +87,9 @@ public class UDPDeMultiplexer
             {
                 usedResponse = true;
                 var udpClientReceive = await udpClientReceiveTask;
-                var newBuffer = new byte[udpClientReceive.ReceivedBytes];
-                Buffer.BlockCopy(buffer, 0, newBuffer, 0, udpClientReceive.ReceivedBytes);
+                
+                var newBuffer = ArrayPoolInterface.Rent(udpClientReceive.ReceivedBytes);
+                Buffer.BlockCopy(_buffer, 0, newBuffer, 0, udpClientReceive.ReceivedBytes);
                 gotLock = false;
                 lock (_lock)
                 {
@@ -98,7 +105,7 @@ public class UDPDeMultiplexer
 #endif
 
                                 if (demuxConnections.ReceiveFrom != null &&
-                                    demuxConnections.ReceiveFrom.Task.IsCompletedSuccessfully == false)
+                                    demuxConnections.ReceiveFrom.Task.IsCompleted == false)
                                 {
                                     demuxConnections.ReceiveFrom.SetResult(newBuffer);
                                 }
@@ -120,6 +127,7 @@ public class UDPDeMultiplexer
                     Console.WriteLine(
                         $"Found nothing listening... on {udpClientReceive.RemoteEndPoint}, {Connections.Count} - {Convert.ToBase64String(newBuffer.ToArray().Take(10).ToArray())}");
 #endif
+                        ArrayPoolInterface.Return(newBuffer);
                     }
                 }
             }
@@ -164,6 +172,7 @@ public class UDPDeMultiplexer
     {
         lock(_lock)
         {
+            GCHandle.Alloc(_buffer, GCHandleType.Pinned).Free();
             foreach (var keyPair in Connections)
                 try
                 {
@@ -173,6 +182,13 @@ public class UDPDeMultiplexer
                         demuxConnections.ReceiveFrom.TrySetException(
                             new OperationCanceledException(
                                 "Operation was cancelled by the pool being disposed"));
+
+                    if (demuxConnections.Queue != null)
+                        foreach (var rentedArray in demuxConnections.Queue)
+                            ArrayPoolInterface.Return(rentedArray);
+                    if (demuxConnections.ReceiveFrom != null && demuxConnections.ReceiveFrom.Task.IsCompletedSuccessfully)
+                        ArrayPoolInterface.Return(demuxConnections.ReceiveFrom.Task.Result);
+
                 }
                 catch (Exception ex)
                 {
@@ -183,11 +199,11 @@ public class UDPDeMultiplexer
         }
     }
 
-    public async ValueTask<Memory<byte>> ReceiveFromAsync(DemuxSocketWrapper socketWrapper, SocketFlags socketFlags,
+    public async ValueTask<byte[]> ReceiveFromAsync(DemuxSocketWrapper socketWrapper, SocketFlags socketFlags,
         EndPoint remoteEndPoint,
         CancellationToken cancellationToken = default)
     {
-        Task<Memory<byte>> newTask = null;
+        Task<byte[]> newTask = null;
         var tryEnter = false;
         lock(_lock)
         {
@@ -206,7 +222,7 @@ public class UDPDeMultiplexer
 
             socketWrapper.CancellationToken = cancellationToken;
             socketWrapper.ReceiveFrom =
-                new TaskCompletionSource<Memory<byte>>(TaskCreationOptions.RunContinuationsAsynchronously);
+                new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
             newTask = socketWrapper.ReceiveFrom.Task;
 #if DEBUG
                 Console.WriteLine($"Starting Task for receiving Packet from {remoteEndPoint}");
@@ -215,7 +231,7 @@ public class UDPDeMultiplexer
 
         try
         {
-            return await new ValueTask<Memory<byte>>(newTask);
+            return await new ValueTask<byte[]>(newTask);
         }
         finally
         {
@@ -239,8 +255,16 @@ public class UDPDeMultiplexer
     {
         lock(_lock)
         {
-            if (Connections.Remove(endPoint) == false)
+            if (Connections.Remove(endPoint, out var currentValue) == false)
                 throw new InvalidOperationException("Failed to remove endpoint listener, already gone?");
+            else
+            {
+                if (currentValue.Queue != null)
+                    foreach (var rentedArray in currentValue.Queue)
+                        ArrayPoolInterface.Return(rentedArray);
+                if (currentValue.ReceiveFrom != null && currentValue.ReceiveFrom.Task.IsCompletedSuccessfully)
+                        ArrayPoolInterface.Return(currentValue.ReceiveFrom.Task.Result);
+            }
         }
     }
 }

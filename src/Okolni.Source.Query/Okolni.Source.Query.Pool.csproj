@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <Version>1.5.0</Version>
+    <Version>1.5.1</Version>
     <Authors>Tyler O'Brien</Authors>
     <Product>Okolni Source Query Pool</Product>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -12,7 +12,8 @@
     <PackageProjectUrl></PackageProjectUrl>
     <RepositoryUrl>https://github.com/Tyler-OBrien/Okolni-Source-Query-Pool</RepositoryUrl>
     <RepositoryType>GitHub</RepositoryType>
-    <PackageReleaseNotes>                   1.5.0 Publish performance optimizations and stable .net 8 release
+    <PackageReleaseNotes>                   1.5.1: Reduce allocations by using Memory&lt;&gt; and Spans as much as possible, ArrayPool for the few necessary allocations, and using pinned heap objects
+                   1.5.0 Publish performance optimizations and stable .net 8 release
 		1.4.3-alpha Testing locking mechancism v2
 	    1.4.2-alpha Fix lock fail I didn't spot in tests but failed instantly in prod :(
 	    1.4.1-alpha Change internal locking to try to reclaim some of the lost performance
@@ -39,7 +40,7 @@
     <NeutralLanguage>en</NeutralLanguage>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <PackageId>Okolni.Source.Query.Pool</PackageId>
-    <FileVersion>1.5.0</FileVersion>
+    <FileVersion>1.5.1</FileVersion>
     <AssemblyVersion></AssemblyVersion>
   </PropertyGroup>
 </Project>

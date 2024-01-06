@@ -12,12 +12,12 @@ namespace Okolni.Source.Query.Test
     
     public class FunctionalTests
     {
-        [DataRow("51.79.37.206", 2303)]
+        [DataRow("104.143.2.22", 28015)]
         [DataRow("168.100.162.254", 28015)]
         [DataRow("154.16.128.32", 28015)]
         [DataRow("164.132.202.2", 27018)]
-        [DataRow("173.199.107.143", 7780)]
-        [DataRow("216.52.148.47", 27015)]
+        [DataRow("199.231.233.52", 28015)]
+        [DataRow("199.231.233.171", 28015)]
 
         public void QueryTestSync(string Host, int Port)
         {
@@ -39,12 +39,12 @@ namespace Okolni.Source.Query.Test
         }
 
         [TestMethod]
-        [DataRow("51.79.37.206", 2303)]
+        [DataRow("104.143.2.22", 28015)]
         [DataRow("168.100.162.254", 28015)]
         [DataRow("154.16.128.32", 28015)]
         [DataRow("164.132.202.2", 27018)]
-        [DataRow("173.199.107.143", 7780)]
-        [DataRow("216.52.148.47", 27015)]
+        [DataRow("199.231.233.52", 28015)]
+        [DataRow("199.231.233.171", 28015)]
         public async Task QueryTestASync(string Host, int Port)
         {
             using IQueryConnection conn = new QueryConnection();

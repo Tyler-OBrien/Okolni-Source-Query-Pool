@@ -55,7 +55,7 @@ public class DemuxSocket
         return m_socket.SendToAsync(buffer, socketFlags, remoteEP, cancellationToken);
     }
 
-    public ValueTask<Memory<byte>> ReceiveFromAsync(DemuxSocketWrapper socketWrapper, SocketFlags socketFlags, EndPoint remoteEndPoint,
+    public ValueTask<byte[]> ReceiveFromAsync(DemuxSocketWrapper socketWrapper, SocketFlags socketFlags, EndPoint remoteEndPoint,
         CancellationToken cancellationToken = default)
     {
         return m_udpDeMultiplexer.ReceiveFromAsync(socketWrapper, socketFlags, remoteEndPoint, cancellationToken);
