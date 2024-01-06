@@ -17,9 +17,9 @@ namespace Okolni.Source.Query.Pool.Common.SocketHelpers
 
         public CancellationToken CancellationToken;
 
-        public TaskCompletionSource<byte[]> ReceiveFrom;
+        public TaskCompletionSource<ArrayPoolMemory> ReceiveFrom;
 
-        public Queue<byte[]> Queue { get; private set; } =  new Queue<byte[]>();
+        public Queue<ArrayPoolMemory> Queue { get; private set; } =  new Queue<ArrayPoolMemory>();
 
         public DemuxSocketWrapper(DemuxSocket demuxSocket, IPEndPoint endPoint)
         {
@@ -34,7 +34,7 @@ namespace Okolni.Source.Query.Pool.Common.SocketHelpers
             return await _demuxSocket.SendToAsync(buffer, socketFlags, remoteEP, cancellationToken);
         }
 
-        public ValueTask<byte[]> ReceiveFromAsync(SocketFlags socketFlags, EndPoint remoteEndPoint,
+        public ValueTask<ArrayPoolMemory> ReceiveFromAsync(SocketFlags socketFlags, EndPoint remoteEndPoint,
             CancellationToken cancellationToken = default)
         {
             return _demuxSocket.ReceiveFromAsync(this, socketFlags, remoteEndPoint, cancellationToken);

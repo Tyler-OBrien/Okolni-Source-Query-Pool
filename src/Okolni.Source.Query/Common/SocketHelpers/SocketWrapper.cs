@@ -1,4 +1,5 @@
 ﻿using Okolni.Source.Query.Pool.Common;
+using Okolni.Source.Query.Pool.Common.SocketHelpers;
 using System;
 using System.Buffers;
 using System.Net;
@@ -31,7 +32,7 @@ public class SocketWrapper : ISocket
 
 
     /// <inheritdoc />
-    public async ValueTask<byte[]> ReceiveFromAsync(
+    public async ValueTask<ArrayPoolMemory> ReceiveFromAsync(
         SocketFlags socketFlags,
         EndPoint remoteEndPoint,
         CancellationToken cancellationToken = default)
@@ -41,7 +42,7 @@ public class SocketWrapper : ISocket
         var newBuffer = ArrayPoolInterface.Rent(response.ReceivedBytes);
         Buffer.BlockCopy(buffer, 0, newBuffer, 0, response.ReceivedBytes);
         ArrayPoolInterface.Return(buffer);
-        return newBuffer;
+        return new ArrayPoolMemory(newBuffer, response.ReceivedBytes);
     }
 
     // Not useful for this...

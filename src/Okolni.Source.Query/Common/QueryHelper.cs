@@ -12,6 +12,7 @@ using Okolni.Source.Common;
 using Okolni.Source.Common.ByteHelper;
 using Okolni.Source.Query.Common.SocketHelpers;
 using Okolni.Source.Query.Pool.Common;
+using Okolni.Source.Query.Pool.Common.SocketHelpers;
 using Okolni.Source.Query.Responses;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 using String = System.String;
@@ -20,13 +21,13 @@ namespace Okolni.Source.Query.Common;
 
 internal static class QueryHelper
 {
-    private static async Task Request(byte[] requestMessage, IPEndPoint endPoint, ISocket socket, int SendTimeout)
+    private static async Task Request(Memory<byte> requestMessage, IPEndPoint endPoint, ISocket socket, int SendTimeout)
     {
         var newCancellationToken = new CancellationTokenSource();
         newCancellationToken.CancelAfter(SendTimeout);
         try
         {
-            await socket.SendToAsync(new ReadOnlyMemory<byte>(requestMessage), SocketFlags.None, endPoint,
+            await socket.SendToAsync(requestMessage, SocketFlags.None, endPoint,
                 newCancellationToken.Token);
         }
         catch (OperationCanceledException)
@@ -35,7 +36,7 @@ internal static class QueryHelper
         }
     }
 
-    private static async Task<byte[]> ReceiveAsync(IPEndPoint endPoint, ISocket socket, int ReceiveTimeout)
+    private static async Task<ArrayPoolMemory> ReceiveAsync(IPEndPoint endPoint, ISocket socket, int ReceiveTimeout)
     {
         var newCancellationToken = new CancellationTokenSource();
         newCancellationToken.CancelAfter(ReceiveTimeout);
@@ -54,11 +55,11 @@ internal static class QueryHelper
     private static async Task<(Memory<byte> response, byte[] baseArray)> FetchResponse(IPEndPoint endPoint, ISocket socket, int ReceiveTimeout)
     {
         var response = await ReceiveAsync(endPoint, socket, ReceiveTimeout);
-        var byteReader = response.GetByteReader();
+        var byteReader = response.UsableChunk.GetByteReader(response.RawRequest);
         var header = byteReader.GetUInt();
         if (header.Equals(Constants.SimpleResponseHeader))
-            return (byteReader.GetRemaining(), response);
-        return await FetchMultiPacketResponse(response, byteReader, endPoint, socket, ReceiveTimeout);
+            return (byteReader.GetRemaining(), response.RawRequest);
+        return await FetchMultiPacketResponse(response.RawRequest, byteReader, endPoint, socket, ReceiveTimeout);
     }
 
     private static async Task<(Memory<byte> response, byte[] baseArray)> FetchMultiPacketResponse(byte[] incArray, IByteReader byteReader, IPEndPoint endPoint,
@@ -76,7 +77,7 @@ internal static class QueryHelper
         for (var i = 1; i < firstResponse.Total; i++)
         {
             var response = await ReceiveAsync(endPoint, socket, ReceiveTimeout);
-            var multiResponseByteReader = response.GetByteReader();
+            var multiResponseByteReader = response.UsableChunk.GetByteReader(response.RawRequest);
             var header = multiResponseByteReader.GetUInt();
             if (header != Constants.MultiPacketResponseHeader)
             {
@@ -95,7 +96,7 @@ internal static class QueryHelper
             {
                 Id = id, Total = multiResponseByteReader.GetByte(), Number = multiResponseByteReader.GetByte(),
                 Size = multiResponseByteReader.GetShort(), Payload = multiResponseByteReader.GetRemaining(),
-                ReceivedByteArrayRef = response,
+                ReceivedByteArrayRef = response.RawRequest,
             });
         }
 
@@ -147,7 +148,7 @@ internal static class QueryHelper
         try
         {
             await socket.Setup();
-            (byteReader, var header, int retriesUsed) = await RequestDataFromServer(Constants.A2S_INFO_REQUEST,
+            (byteReader, var header, int retriesUsed) = await RequestDataFromServer(CopyStaticByteIntoArrayPoolArray(Constants.A2S_INFO_REQUEST, 4),
                 endPoint, socket, maxRetries,
                 sendTimeout, receiveTimeout, Constants.A2S_INFO_RESPONSE);
 
@@ -222,7 +223,7 @@ internal static class QueryHelper
         {
             await socket.Setup();
             (byteReader, var header, int retriesUsed) = await RequestDataFromServer(
-                Constants.A2S_PLAYER_CHALLENGE_REQUEST, endPoint, socket,
+                CopyStaticByteIntoArrayPoolArray(Constants.A2S_PLAYER_CHALLENGE_REQUEST), endPoint, socket,
                 maxRetries, sendTimeout, ReceiveTimeout, Constants.A2S_PLAYER_RESPONSE, true);
 
 
@@ -282,7 +283,7 @@ internal static class QueryHelper
         {
             await socket.Setup();
             (byteReader, var header, int retriesUsed) = await RequestDataFromServer(
-                Constants.A2S_RULES_CHALLENGE_REQUEST, endPoint, socket,
+                CopyStaticByteIntoArrayPoolArray(Constants.A2S_RULES_CHALLENGE_REQUEST), endPoint, socket,
                 maxRetries, sendTimeout, receiveTimeout, Constants.A2S_RULES_RESPONSE, true);
 
 
@@ -308,24 +309,24 @@ internal static class QueryHelper
     }
 
 
-    public static void HandleChallenge(ref byte[] retryRequest, ReadOnlySpan<byte> challenge, bool replaceLastBytesInRequest)
-    {
-        return;
-        if (replaceLastBytesInRequest)
-        {
-            int start = Math.Max(0, retryRequest.Length - 4);
-            int maxlength = retryRequest.Length - start;
-            if (challenge.Length > maxlength)
-                challenge = challenge.Slice(0, challenge.Length - maxlength);
 
-            Array.Copy(challenge.ToArray(), 0, retryRequest, start, challenge.Length);
-        }
-        else
-        {
-            int initialLength = retryRequest.Length;
-            Array.Resize(ref retryRequest, retryRequest.Length + challenge.Length);
-            Array.Copy(challenge.ToArray(), 0, retryRequest, initialLength, challenge.Length);
-        }
+    public static ArrayPoolMemory CopyStaticByteIntoArrayPoolArray(byte[] input, int extraBytes  = 0)
+    {
+        var intendedLength = input.Length + extraBytes;
+        var rentedArray = ArrayPoolInterface.Rent(intendedLength);
+        Buffer.BlockCopy(input, 0, rentedArray, 0, input.Length);
+        return new ArrayPoolMemory(rentedArray, intendedLength);
+    }
+
+    public static void HandleChallenge(ref ArrayPoolMemory retryRequest, ReadOnlyMemory<byte> challenge, bool replaceLastBytesInRequest)
+    {
+        int start = Math.Max(0, retryRequest.UsableChunk.Length - 4);
+        int maxlength = retryRequest.UsableChunk.Length - start;
+        if (challenge.Length > maxlength)
+            challenge = challenge.Slice(0, challenge.Length - maxlength);
+
+        Buffer.BlockCopy(challenge.ToArray(), 0, retryRequest.RawRequest, start, challenge.Length);
+
     }
 
 
@@ -333,92 +334,104 @@ internal static class QueryHelper
 
     // This could do with some clean up
     // headerWeWant was added specifically because, it looks like Path.net DDos Protected Servers (I'm thinking maybe their A2S Caching layer)? sometimes respond with A2S_INFO Replies to A2S_Player/A2S_Rules Queries...
-    public static async Task<(IByteReader reader, byte header, int retriesUsed)> RequestDataFromServer(byte[] request,
+    public static async Task<(IByteReader reader, byte header, int retriesUsed)> RequestDataFromServer(ArrayPoolMemory rawRequest,
         IPEndPoint endPoint, ISocket socket, int maxRetries, int sendTimeout, int ReceiveTimeout, byte headerWeWant,
         bool replaceLastBytesInRequest = false)
     {
-        IByteReader byteReader = null;
-        var retries = 0;
-        // Always try at least once...
-        do
+        try
         {
-            try
+            IByteReader byteReader = null;
+            var retries = 0;
+            var request = rawRequest.UsableChunk;
+            // Always try at least once...
+            do
             {
-                await Request(request, endPoint, socket, sendTimeout);
-                var response = await FetchResponse(endPoint, socket, ReceiveTimeout);
-
-                byteReader = response.response.GetByteReader(response.baseArray);
-                var header = byteReader.GetByte();
-
-                if (header == Constants
-                        .CHALLENGE_RESPONSE ||
-                    header !=
-                    headerWeWant) // Header response is a challenge response so the challenge must be sent as well
+                try
                 {
-                    do
+                    if (replaceLastBytesInRequest)
+                        await Request(request, endPoint, socket, sendTimeout);
+                    else
+                        await Request(request.Slice(0, request.Length - 4), endPoint, socket, sendTimeout);
+                    var response = await FetchResponse(endPoint, socket, ReceiveTimeout);
+
+                    byteReader = response.response.GetByteReader(response.baseArray);
+                    var header = byteReader.GetByte();
+
+                    if (header == Constants
+                            .CHALLENGE_RESPONSE ||
+                        header !=
+                        headerWeWant) // Header response is a challenge response so the challenge must be sent as well
                     {
-                        var retryRequest = request;
-                        // Note for future: Nothing guarantees the A2S_Info Challenge will always be 4 bytes. A2S_Players and A2S_Rules Challenge length is defined in spec/dev docs, but not A2S_Info.
-                        var challenge = byteReader.GetBytes(4);
-                        HandleChallenge(ref retryRequest, challenge.Span, replaceLastBytesInRequest);
-
-                        await Request(retryRequest, endPoint, socket, sendTimeout);
-
-                        var retryResponse = await FetchResponse(endPoint, socket, ReceiveTimeout);
-                        byteReader.Dispose();
-                        byteReader = retryResponse.response.GetByteReader(retryResponse.baseArray);
-                        header = byteReader.GetByte();
-                        if (header == Constants.CHALLENGE_RESPONSE || header != headerWeWant)
-                            retries++;
-#if DEBUG
-                        if (header != headerWeWant && header != Constants.CHALLENGE_RESPONSE)
+                        do
                         {
-                            Console.WriteLine(
-                                $"We got back a non-challenge response for {endPoint}, but it was {header}, not {headerWeWant}");
-                        }
+                            // Note for future: Nothing guarantees the A2S_Info Challenge will always be 4 bytes. A2S_Players and A2S_Rules Challenge length is defined in spec/dev docs, but not A2S_Info.
+                            var challenge = byteReader.GetBytes(4);
+                            HandleChallenge(ref rawRequest, challenge, replaceLastBytesInRequest);
+
+                            await Request(request, endPoint, socket, sendTimeout);
+
+                            var retryResponse = await FetchResponse(endPoint, socket, ReceiveTimeout);
+                            byteReader.Dispose();
+                            byteReader = retryResponse.response.GetByteReader(retryResponse.baseArray);
+                            header = byteReader.GetByte();
+                            if (header == Constants.CHALLENGE_RESPONSE || header != headerWeWant)
+                                retries++;
+#if DEBUG
+                            if (header != headerWeWant && header != Constants.CHALLENGE_RESPONSE)
+                            {
+                                Console.WriteLine(
+                                    $"We got back a non-challenge response for {endPoint}, but it was {header}, not {headerWeWant}");
+                            }
 #endif
-                    } while ((header == Constants.CHALLENGE_RESPONSE || header != headerWeWant) &&
-                             retries < maxRetries);
+                        } while ((header == Constants.CHALLENGE_RESPONSE || header != headerWeWant) &&
+                                 retries < maxRetries);
 
-                    if (header == Constants.CHALLENGE_RESPONSE)
-                        throw new SourceQueryException(
-                            $"Retry limit exceeded for the request.  Tried {retries} times, but couldn't get non-challenge packet.");
+                        if (header == Constants.CHALLENGE_RESPONSE)
+                            throw new SourceQueryException(
+                                $"Retry limit exceeded for the request.  Tried {retries} times, but couldn't get non-challenge packet.");
 
-                    if (header != headerWeWant)
-                        throw new SourceQueryException(
-                            $"Retry limit exceeded for the request.  Tried {retries} times, but we only got the wrong header of {header} when we wanted {headerWeWant}.");
-                }
+                        if (header != headerWeWant)
+                            throw new SourceQueryException(
+                                $"Retry limit exceeded for the request.  Tried {retries} times, but we only got the wrong header of {header} when we wanted {headerWeWant}.");
+                    }
 
 #if DEBUG
-                if (retries > 0)
+                    if (retries > 0)
+                    {
+                        Console.WriteLine($"Took {retries} retries for {endPoint}....");
+                    }
+#endif
+
+                    return (byteReader, header, retries);
+                }
+                // Any timeout is just another signal to continue
+                catch (TimeoutException)
                 {
-                    Console.WriteLine($"Took {retries} retries for {endPoint}....");
-                }
-#endif
-
-                return (byteReader, header, retries);
-            }
-            // Any timeout is just another signal to continue
-            catch (TimeoutException)
-            {
 #if DEBUG
-                Console.WriteLine($"Timeout for {endPoint}");
+                    Console.WriteLine($"Timeout for {endPoint}");
 #endif
-                /* Nom */
-                byteReader?.Dispose();
-            }
-            catch (Exception)
-            { // ensure disposal
-                byteReader?.Dispose();
-                throw;
-            }
-            finally
-            {
-                // Intellij gets confused, keep in mind above we are returning the byteReader and header if everything else is successful
-                retries++;
-            }
-        } while (retries < maxRetries);
-        byteReader?.Dispose();
-        throw new SourceQueryException($"Retry limit exceeded for the request. Tried {retries} times.");
+                    /* Nom */
+                    byteReader?.Dispose();
+                }
+                catch (Exception)
+                {
+                    // ensure disposal
+                    byteReader?.Dispose();
+                    throw;
+                }
+                finally
+                {
+                    // Intellij gets confused, keep in mind above we are returning the byteReader and header if everything else is successful
+                    retries++;
+                }
+            } while (retries < maxRetries);
+
+            byteReader?.Dispose();
+            throw new SourceQueryException($"Retry limit exceeded for the request. Tried {retries} times.");
+        }
+        finally
+        {
+            ArrayPoolInterface.Return(rawRequest.RawRequest);
+        }
     }
 }

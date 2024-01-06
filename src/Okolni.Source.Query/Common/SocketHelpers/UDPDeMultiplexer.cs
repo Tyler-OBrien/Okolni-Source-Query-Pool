@@ -49,7 +49,6 @@ public class UDPDeMultiplexer
         _buffer  = GC.AllocateArray<byte>(length: 65527, pinned: true);
         var usedResponse = true;
         var cleanedUpResponses = true;
-        var gotLock = false;
 
         while (true)
         {
@@ -90,7 +89,6 @@ public class UDPDeMultiplexer
                 
                 var newBuffer = ArrayPoolInterface.Rent(udpClientReceive.ReceivedBytes);
                 Buffer.BlockCopy(_buffer, 0, newBuffer, 0, udpClientReceive.ReceivedBytes);
-                gotLock = false;
                 lock (_lock)
                 {
                     if (Connections.TryGetValue(udpClientReceive.RemoteEndPoint,
@@ -107,11 +105,11 @@ public class UDPDeMultiplexer
                                 if (demuxConnections.ReceiveFrom != null &&
                                     demuxConnections.ReceiveFrom.Task.IsCompleted == false)
                                 {
-                                    demuxConnections.ReceiveFrom.SetResult(newBuffer);
+                                    demuxConnections.ReceiveFrom.SetResult(new ArrayPoolMemory(newBuffer, udpClientReceive.ReceivedBytes));
                                 }
                                 else
                                 {
-                                    demuxConnections.Queue.Enqueue(newBuffer);
+                                    demuxConnections.Queue.Enqueue(new ArrayPoolMemory(newBuffer, udpClientReceive.ReceivedBytes));
                                 }
                             }
                             catch (Exception ex)
@@ -132,7 +130,6 @@ public class UDPDeMultiplexer
                 }
             }
 
-            gotLock = false;
 
             if (delayTask.IsCompletedSuccessfully)
                 cleanedUpResponses = true;
@@ -142,8 +139,7 @@ public class UDPDeMultiplexer
                     try
                     {
                         var demuxConnections = keyPair.Value;
-                        if (demuxConnections.ReceiveFrom != null &&
-                            demuxConnections.ReceiveFrom.Task.IsCompleted == false &&
+                        if (demuxConnections.ReceiveFrom is { Task.IsCompleted: false } &&
                             demuxConnections.CancellationToken != CancellationToken.None &&
                             demuxConnections.CancellationToken.IsCancellationRequested)
                         {
@@ -185,9 +181,9 @@ public class UDPDeMultiplexer
 
                     if (demuxConnections.Queue != null)
                         foreach (var rentedArray in demuxConnections.Queue)
-                            ArrayPoolInterface.Return(rentedArray);
+                            ArrayPoolInterface.Return(rentedArray.RawRequest);
                     if (demuxConnections.ReceiveFrom != null && demuxConnections.ReceiveFrom.Task.IsCompletedSuccessfully)
-                        ArrayPoolInterface.Return(demuxConnections.ReceiveFrom.Task.Result);
+                        ArrayPoolInterface.Return(demuxConnections.ReceiveFrom.Task.Result.RawRequest);
 
                 }
                 catch (Exception ex)
@@ -199,11 +195,11 @@ public class UDPDeMultiplexer
         }
     }
 
-    public async ValueTask<byte[]> ReceiveFromAsync(DemuxSocketWrapper socketWrapper, SocketFlags socketFlags,
+    public async ValueTask<ArrayPoolMemory> ReceiveFromAsync(DemuxSocketWrapper socketWrapper, SocketFlags socketFlags,
         EndPoint remoteEndPoint,
         CancellationToken cancellationToken = default)
     {
-        Task<byte[]> newTask = null;
+        Task<ArrayPoolMemory> newTask = null;
         var tryEnter = false;
         lock(_lock)
         {
@@ -222,7 +218,7 @@ public class UDPDeMultiplexer
 
             socketWrapper.CancellationToken = cancellationToken;
             socketWrapper.ReceiveFrom =
-                new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+                new TaskCompletionSource<ArrayPoolMemory>(TaskCreationOptions.RunContinuationsAsynchronously);
             newTask = socketWrapper.ReceiveFrom.Task;
 #if DEBUG
                 Console.WriteLine($"Starting Task for receiving Packet from {remoteEndPoint}");
@@ -231,7 +227,7 @@ public class UDPDeMultiplexer
 
         try
         {
-            return await new ValueTask<byte[]>(newTask);
+            return await new ValueTask<ArrayPoolMemory>(newTask);
         }
         finally
         {
@@ -244,10 +240,8 @@ public class UDPDeMultiplexer
     {
         lock(_lock)
         {
-            if (Connections.ContainsKey(endPoint))
+            if (!Connections.TryAdd(endPoint, wrapper))
                 throw new InvalidOperationException("Only one listener per endpoint active at one time...");
-
-            Connections[endPoint] = wrapper;
         }
     }
 
@@ -261,9 +255,9 @@ public class UDPDeMultiplexer
             {
                 if (currentValue.Queue != null)
                     foreach (var rentedArray in currentValue.Queue)
-                        ArrayPoolInterface.Return(rentedArray);
+                        ArrayPoolInterface.Return(rentedArray.RawRequest);
                 if (currentValue.ReceiveFrom != null && currentValue.ReceiveFrom.Task.IsCompletedSuccessfully)
-                        ArrayPoolInterface.Return(currentValue.ReceiveFrom.Task.Result);
+                        ArrayPoolInterface.Return(currentValue.ReceiveFrom.Task.Result.RawRequest);
             }
         }
     }
