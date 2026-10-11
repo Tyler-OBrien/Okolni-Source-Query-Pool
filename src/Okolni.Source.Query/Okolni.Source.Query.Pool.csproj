@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <Version>1.5.2</Version>
+    <TargetFramework>net10.0</TargetFramework>
+    <Version>1.6.0</Version>
     <Authors>Tyler O'Brien</Authors>
     <Product>Okolni Source Query Pool</Product>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -12,7 +12,8 @@
     <PackageProjectUrl></PackageProjectUrl>
     <RepositoryUrl>https://github.com/Tyler-OBrien/Okolni-Source-Query-Pool</RepositoryUrl>
     <RepositoryType>GitHub</RepositoryType>
-    <PackageReleaseNotes>                   1.5.2  Fixed issue with challenges, handle request allocations better with ArrayPool, add ArrayPoolMemory Struct for passing around byte[] ref + memory, and properly respect the fact ArrayPool may give us an array  larger then required, so we should use Spans/Memorys to limit our view to the requested memory length region of it.
+    <PackageReleaseNotes>                   1.6.0 Target .NET 10, local fake-server test suite, fixes found by tests
+                   1.5.2  Fixed issue with challenges, handle request allocations better with ArrayPool, add ArrayPoolMemory Struct for passing around byte[] ref + memory, and properly respect the fact ArrayPool may give us an array  larger then required, so we should use Spans/Memorys to limit our view to the requested memory length region of it.
                    1.5.1: Reduce allocations by using Memory&lt;&gt; and Spans as much as possible, ArrayPool for the few necessary allocations, and using pinned heap objects
                    1.5.0 Publish performance optimizations and stable .net 8 release
 		1.4.3-alpha Testing locking mechancism v2
@@ -41,7 +42,7 @@
     <NeutralLanguage>en</NeutralLanguage>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <PackageId>Okolni.Source.Query.Pool</PackageId>
-    <FileVersion>1.5.2</FileVersion>
+    <FileVersion>1.6.0</FileVersion>
     <AssemblyVersion></AssemblyVersion>
   </PropertyGroup>
 </Project>
