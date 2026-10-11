@@ -40,117 +40,64 @@ public class UDPDeMultiplexer
 #if DEBUG
         Console.WriteLine($"Starting up Demux Worker - {Environment.CurrentManagedThreadId}");
 #endif
-        var delayTask = Task.Delay(500, token).HandleOperationCancelled();
-        Task<SocketReceiveFromResult> udpClientReceiveTask = null;
-        var udpClientReceiveValueTask = new ValueTask<SocketReceiveFromResult>();
-        _buffer  = GC.AllocateArray<byte>(length: 65527, pinned: true);
-        var usedResponse = true;
-        var cleanedUpResponses = true;
-
-        while (true)
+        _buffer = GC.AllocateArray<byte>(length: 65527, pinned: true);
+        try
         {
-            if (token.IsCancellationRequested)
+            // Timeouts are handled by each waiting receive's own cancellation registration (see ReceiveFromAsync),
+            // so this loop only has to receive and hand packets out.
+            while (!token.IsCancellationRequested)
             {
-                await Cleanup();
-                socket?.Dispose();
-                return;
-            }
-
-            // We might have timed out from the delayTask, but still are waiting for a new packet.
-            if (usedResponse)
-            {
-                udpClientReceiveTask?.Dispose();
-                udpClientReceiveValueTask =
-                    socket.ReceiveFromAsync(_buffer, SocketFlags.None, endPoint,
-                        token);
-                udpClientReceiveTask = udpClientReceiveValueTask.AsTask().HandleOperationCancelled();
-                usedResponse = false;
-            }
-
-            if (udpClientReceiveTask.IsCompleted == false)
-            {
-                if (cleanedUpResponses)
+                SocketReceiveFromResult received;
+                try
                 {
-                    delayTask = Task.Delay(500, token).HandleOperationCancelled();
-                    cleanedUpResponses = false;
+                    received = await socket.ReceiveFromAsync(_buffer, SocketFlags.None, endPoint, token);
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (SocketException ex)
+                {
+                    // e.g. ICMP port unreachable surfacing on some platforms. The affected query just times out.
+                    Message?.Invoke($"Socket error while receiving, continuing: {ex.SocketErrorCode}");
+                    continue;
                 }
 
-                await Task.WhenAny(udpClientReceiveTask, delayTask);
+                Deliver(received);
             }
+        }
+        finally
+        {
+            await Cleanup();
+            socket?.Dispose();
+        }
+    }
 
-            // If there is a new packet to be recieved
-            if (udpClientReceiveTask.IsCompletedSuccessfully)
+    private void Deliver(SocketReceiveFromResult received)
+    {
+        var newBuffer = ArrayPoolInterface.Rent(received.ReceivedBytes);
+        Buffer.BlockCopy(_buffer, 0, newBuffer, 0, received.ReceivedBytes);
+        var packet = new ArrayPoolMemory(newBuffer, received.ReceivedBytes);
+        lock (_lock)
+        {
+            if (Connections.TryGetValue(received.RemoteEndPoint, out var demuxConnection))
             {
-                usedResponse = true;
-                var udpClientReceive = await udpClientReceiveTask;
-                
-                var newBuffer = ArrayPoolInterface.Rent(udpClientReceive.ReceivedBytes);
-                Buffer.BlockCopy(_buffer, 0, newBuffer, 0, udpClientReceive.ReceivedBytes);
-                lock (_lock)
-                {
-                    if (Connections.TryGetValue(udpClientReceive.RemoteEndPoint,
-                            out var demuxConnections))
-                    {
-                        {
-                            try
-                            {
 #if DEBUG
-                            Console.WriteLine(
-                                $"Delivered packet to {udpClientReceive.RemoteEndPoint} - {Convert.ToBase64String(newBuffer.ToArray().Take(10).ToArray())}");
+                Console.WriteLine(
+                    $"Delivered packet to {received.RemoteEndPoint} - {Convert.ToBase64String(newBuffer.Take(10).ToArray())}");
 #endif
-
-                                if (demuxConnections.ReceiveFrom != null &&
-                                    demuxConnections.ReceiveFrom.Task.IsCompleted == false)
-                                {
-                                    demuxConnections.ReceiveFrom.SetResult(new ArrayPoolMemory(newBuffer, udpClientReceive.ReceivedBytes));
-                                }
-                                else
-                                {
-                                    demuxConnections.Queue.Enqueue(new ArrayPoolMemory(newBuffer, udpClientReceive.ReceivedBytes));
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Error?.Invoke(ex);
-                            }
-                        }
-                    }
-                    // This endpoint isn't registered yet
-                    else
-                    {
-#if DEBUG
-                    Console.WriteLine(
-                        $"Found nothing listening... on {udpClientReceive.RemoteEndPoint}, {Connections.Count} - {Convert.ToBase64String(newBuffer.ToArray().Take(10).ToArray())}");
-#endif
-                        ArrayPoolInterface.Return(newBuffer);
-                    }
-                }
+                // TrySetResult, since a timeout can complete the waiting receive at any moment
+                if (demuxConnection.ReceiveFrom == null || !demuxConnection.ReceiveFrom.TrySetResult(packet))
+                    demuxConnection.Queue.Enqueue(packet);
             }
-
-
-            if (delayTask.IsCompletedSuccessfully)
-                cleanedUpResponses = true;
-            lock(_lock)
+            // This endpoint isn't registered (yet / anymore), e.g. a late reply after a timeout
+            else
             {
-                foreach (var keyPair in Connections)
-                    try
-                    {
-                        var demuxConnections = keyPair.Value;
-                        if (demuxConnections.ReceiveFrom is { Task.IsCompleted: false } &&
-                            demuxConnections.CancellationToken != CancellationToken.None &&
-                            demuxConnections.CancellationToken.IsCancellationRequested)
-                        {
 #if DEBUG
-                                    Console.WriteLine($"Timed out waiting packet from {keyPair}");
+                Console.WriteLine(
+                    $"Found nothing listening... on {received.RemoteEndPoint}, {Connections.Count} - {Convert.ToBase64String(newBuffer.Take(10).ToArray())}");
 #endif
-                            demuxConnections.ReceiveFrom.TrySetException(
-                                new OperationCanceledException("Operation timed out"));
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Error?.Invoke(ex);
-                    }
+                ArrayPoolInterface.Return(newBuffer);
             }
         }
     }
@@ -224,9 +171,14 @@ public class UDPDeMultiplexer
 #endif
         }
 
+        // Each wait times itself out, rather than the receive loop scanning every listener after every packet
+        await using var registration = cancellationToken.Register(static state =>
+                ((TaskCompletionSource<ArrayPoolMemory>)state!).TrySetException(
+                    new OperationCanceledException("Operation timed out")),
+            socketWrapper.ReceiveFrom);
         try
         {
-            return await new ValueTask<ArrayPoolMemory>(newTask);
+            return await newTask;
         }
         finally
         {
