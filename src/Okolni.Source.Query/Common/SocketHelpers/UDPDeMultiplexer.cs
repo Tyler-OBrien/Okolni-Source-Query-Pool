@@ -29,9 +29,6 @@ public class UDPDeMultiplexer
 
     private byte[] _buffer;
 
-
-    private int _waitingConnections;
-
     public event IQueryConnectionPool.PoolError Error;
 
     /// <inheritdoc />
@@ -161,7 +158,10 @@ public class UDPDeMultiplexer
 
     public int GetWaitingConnections()
     {
-        return _waitingConnections;
+        lock (_lock)
+        {
+            return Connections.Values.Count(connection => connection.ReceiveFrom is { Task.IsCompleted: false });
+        }
     }
 
     private async ValueTask Cleanup()
@@ -200,7 +200,6 @@ public class UDPDeMultiplexer
         CancellationToken cancellationToken = default)
     {
         Task<ArrayPoolMemory> newTask = null;
-        var tryEnter = false;
         lock(_lock)
         {
             if (socketWrapper.Queue.TryDequeue(out var result))

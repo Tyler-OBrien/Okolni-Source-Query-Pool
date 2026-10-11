@@ -100,8 +100,9 @@ internal static class QueryHelper
             });
         }
 
-        var assembledPayload = AssembleResponses(responses);
-        var assembledPayloadByteReader = assembledPayload.GetByteReader();
+        var (assembledPayload, assembledLength) = AssembleResponses(responses);
+        // The rented array can be larger than requested, so only read the assembled length
+        var assembledPayloadByteReader = assembledPayload.AsMemory(0, assembledLength).GetByteReader(assembledPayload);
 
         if (compressed)
             throw new NotImplementedException("Compressed responses are not yet implemented");
@@ -111,7 +112,7 @@ internal static class QueryHelper
         return (assembledPayloadByteReader.GetRemaining(), assembledPayload);
     }
 
-    private static byte[] AssembleResponses(List<MultiPacketResponse> responses)
+    private static (byte[] array, int length) AssembleResponses(List<MultiPacketResponse> responses)
     {
 
         // determine required size
@@ -131,7 +132,7 @@ internal static class QueryHelper
             offset += response.Payload.Length;
         }
 
-        return assembledPayload;
+        return (assembledPayload, totalSize);
     }
 
 

@@ -23,9 +23,10 @@ namespace Okolni.Source.Query.Pool.Common.SocketHelpers
 
         public DemuxSocketWrapper(DemuxSocket demuxSocket, IPEndPoint endPoint)
         {
-            if (endPoint is IPEndPoint ipEndpoint) ipEndpoint.Address = ipEndpoint.Address.MapToIPv6();
+            // The shared socket is dual mode and reports senders as IPv6 mapped addresses, so listen on that form.
+            // Use a copy so the caller's endpoint isn't changed
             _demuxSocket = demuxSocket;
-            _endPoint = endPoint;
+            _endPoint = new IPEndPoint(endPoint.Address.MapToIPv6(), endPoint.Port);
         }
 
         public async ValueTask<int> SendToAsync(ReadOnlyMemory<byte> buffer, SocketFlags socketFlags, EndPoint remoteEP,

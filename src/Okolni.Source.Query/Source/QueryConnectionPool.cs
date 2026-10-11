@@ -61,6 +61,9 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
             );
         }
 
+        SendTimeout = 1000;
+        ReceiveTimeout = 1000;
+
         m_demultiplexer = new UDPDeMultiplexer();
         // lazy passthrough
         m_demultiplexer.Error += exception => Error?.Invoke(exception);
@@ -197,14 +200,15 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
     {
         if (m_cancellationTokenSource is { IsCancellationRequested: false })
             m_cancellationTokenSource.Cancel();
-        m_cancellationTokenSource?.Dispose();
         try
         {
-            await m_backgroundTask.WaitAsync(TimeSpan.FromSeconds(timeoutSeconds), token);
+            // Wait for the worker to finish cleaning up before disposing the token source it's still watching
+            if (m_backgroundTask != null)
+                await m_backgroundTask.WaitAsync(TimeSpan.FromSeconds(timeoutSeconds), token);
         }
         finally
         {
-            m_backgroundTask.Dispose();
+            m_cancellationTokenSource?.Dispose();
         }
         Message?.Invoke("Disposed pool..");
     }
@@ -219,8 +223,6 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
     {
         m_endPoint = new IPEndPoint(IPAddress.Any, 0);
         m_sharedSocket.Bind(m_endPoint);
-        SendTimeout = 1000;
-        ReceiveTimeout = 1000;
         m_socket = new DemuxSocket(m_sharedSocket, m_demultiplexer);
         RunWorker();
         m_init = true;
@@ -229,26 +231,30 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
 
     internal void RunWorker()
     {
-        m_backgroundTask = Task.Factory.StartNew(
-            () =>
+        var token = m_cancellationTokenSource.Token;
+        // Not started with the token, so cancelling before it gets going doesn't cancel the task itself,
+        // and DisposeAsync can always await the worker's cleanup
+        m_backgroundTask = Task.Run(async () =>
+        {
+            try
             {
-                m_demultiplexer.Start(m_sharedSocket, m_endPoint,
-                        m_cancellationTokenSource.Token).ContinueWith(t =>
-                        {
-                            // If there's nothing listening, bubble up
-                            if (Error == null && t.Exception?.InnerException is not OperationCanceledException)
-                                throw new SourceQueryException(
-                                    "Unexpected issue with background service for QueryConnectionPool",
-                                    t.Exception);
+                await m_demultiplexer.Start(m_sharedSocket, m_endPoint, token);
+                Message?.Invoke("Worker exited safely");
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                Message?.Invoke("Worker exited safely");
+            }
+            catch (Exception ex)
+            {
+                // If there's nothing listening, bubble up
+                if (Error == null)
+                    throw new SourceQueryException(
+                        "Unexpected issue with background service for QueryConnectionPool", ex);
 
-                            Error?.Invoke(t.Exception);
-                        },
-                        TaskContinuationOptions.OnlyOnFaulted)
-                    .ContinueWith(t => { Message?.Invoke($"Worker exited safely {t.Status}"); },
-                        TaskContinuationOptions.OnlyOnRanToCompletion);
-                return m_backgroundTask;
-            },
-            m_cancellationTokenSource.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+                Error.Invoke(ex);
+            }
+        });
 
         Message?.Invoke($"Starting Background worker for UDP Socket {m_sharedSocket.LocalEndPoint}");
     }

@@ -38,11 +38,18 @@ public class SocketWrapper : ISocket
         CancellationToken cancellationToken = default)
     {
         var buffer = ArrayPoolInterface.Rent(65527);
-        var response = await m_socket.ReceiveFromAsync(buffer, socketFlags, remoteEndPoint, cancellationToken);
-        var newBuffer = ArrayPoolInterface.Rent(response.ReceivedBytes);
-        Buffer.BlockCopy(buffer, 0, newBuffer, 0, response.ReceivedBytes);
-        ArrayPoolInterface.Return(buffer);
-        return new ArrayPoolMemory(newBuffer, response.ReceivedBytes);
+        try
+        {
+            var response = await m_socket.ReceiveFromAsync(buffer, socketFlags, remoteEndPoint, cancellationToken);
+            var newBuffer = ArrayPoolInterface.Rent(response.ReceivedBytes);
+            Buffer.BlockCopy(buffer, 0, newBuffer, 0, response.ReceivedBytes);
+            return new ArrayPoolMemory(newBuffer, response.ReceivedBytes);
+        }
+        finally
+        {
+            // Also return the buffer when the receive times out or is cancelled
+            ArrayPoolInterface.Return(buffer);
+        }
     }
 
     // Not useful for this...
