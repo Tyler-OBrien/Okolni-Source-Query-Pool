@@ -74,30 +74,38 @@ internal static class QueryHelper
         var compressed = (firstResponse.Id & 2147483648) == 2147483648; // Check for compression
 
         var responses = new List<MultiPacketResponse>(new[] { firstResponse });
-        for (var i = 1; i < firstResponse.Total; i++)
+        var receivedAll = false;
+        try
         {
-            var response = await ReceiveAsync(endPoint, socket, ReceiveTimeout);
-            var multiResponseByteReader = response.UsableChunk.GetByteReader(response.RawRequest);
-            var header = multiResponseByteReader.GetUInt();
-            if (header != Constants.MultiPacketResponseHeader)
+            for (var i = 1; i < firstResponse.Total; i++)
             {
-                i--;
-                continue;
+                var response = await ReceiveAsync(endPoint, socket, ReceiveTimeout);
+                var multiResponseByteReader = response.UsableChunk.GetByteReader(response.RawRequest);
+                var header = multiResponseByteReader.GetUInt();
+                // Skip packets that aren't part of this response (e.g. late replies to an earlier attempt)
+                if (header != Constants.MultiPacketResponseHeader || multiResponseByteReader.GetUInt() != firstResponse.Id)
+                {
+                    ArrayPoolInterface.Return(response.RawRequest);
+                    i--;
+                    continue;
+                }
+
+                responses.Add(new MultiPacketResponse
+                {
+                    Id = firstResponse.Id, Total = multiResponseByteReader.GetByte(), Number = multiResponseByteReader.GetByte(),
+                    Size = multiResponseByteReader.GetShort(), Payload = multiResponseByteReader.GetRemaining(),
+                    ReceivedByteArrayRef = response.RawRequest,
+                });
             }
 
-            var id = multiResponseByteReader.GetUInt();
-            if (id != firstResponse.Id)
-            {
-                i--;
-                continue;
-            }
-
-            responses.Add(new MultiPacketResponse
-            {
-                Id = id, Total = multiResponseByteReader.GetByte(), Number = multiResponseByteReader.GetByte(),
-                Size = multiResponseByteReader.GetShort(), Payload = multiResponseByteReader.GetRemaining(),
-                ReceivedByteArrayRef = response.RawRequest,
-            });
+            receivedAll = true;
+        }
+        finally
+        {
+            // A timeout part way through would otherwise leak the fragments we already have
+            if (!receivedAll)
+                foreach (var response in responses)
+                    ArrayPoolInterface.Return(response.ReceivedByteArrayRef);
         }
 
         var (assembledPayload, assembledLength) = AssembleResponses(responses);
@@ -105,7 +113,10 @@ internal static class QueryHelper
         var assembledPayloadByteReader = assembledPayload.AsMemory(0, assembledLength).GetByteReader(assembledPayload);
 
         if (compressed)
+        {
+            ArrayPoolInterface.Return(assembledPayload);
             throw new NotImplementedException("Compressed responses are not yet implemented");
+        }
 
         _ = assembledPayloadByteReader.GetUInt();
 

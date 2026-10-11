@@ -46,6 +46,24 @@ public class ArrayPoolLeakTests
         await AssertReturnsTo(before);
     }
 
+    [Theory]
+    [MemberData(nameof(QueryClient.Kinds), MemberType = typeof(QueryClient))]
+    public async Task IncompleteMultiPacketResponse_ReturnsAllRentedArrays(string kind)
+    {
+        var before = ArrayPoolInterface.NotReturnedArrays;
+        await using (var server = new FakeA2SServer
+               {
+                   Rules = Enumerable.Range(0, 50).ToDictionary(i => $"rule{i}", i => "value"),
+                   MultiPacketSize = 100, DropFragmentsAfterFirst = true
+               })
+        await using (var client = QueryClient.Create(kind))
+        {
+            await Assert.ThrowsAsync<SourceQueryException>(() => client.GetRulesAsync(server.EndPoint, 2));
+        }
+
+        await AssertReturnsTo(before);
+    }
+
     private static async Task AssertReturnsTo(int expected)
     {
         // The pool's background worker returns its last arrays as it shuts down

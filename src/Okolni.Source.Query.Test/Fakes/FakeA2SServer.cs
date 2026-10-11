@@ -40,6 +40,9 @@ public sealed class FakeA2SServer : IAsyncDisposable
     /// <summary>Send multi-packet fragments in reverse order, to check reassembly orders by packet number.</summary>
     public bool ReverseFragments { get; set; }
 
+    /// <summary>Only send the first multi-packet fragment, as if the rest were lost.</summary>
+    public bool DropFragmentsAfterFirst { get; set; }
+
     /// <summary>
     ///     Answer this many player/rules requests with an A2S_INFO packet first (seen from some DDoS-protected hosts).
     /// </summary>
@@ -117,6 +120,8 @@ public sealed class FakeA2SServer : IAsyncDisposable
         var fragments = A2SPackets.SplitMultiPacket(packet, size, Random.Shared.Next(1, int.MaxValue));
         if (ReverseFragments)
             fragments.Reverse();
+        if (DropFragmentsAfterFirst)
+            return [fragments[0]];
         return fragments;
     }
 
