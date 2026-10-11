@@ -14,6 +14,7 @@ namespace Okolni.Source.Query.Pool.Common.SocketHelpers
     {
         private readonly DemuxSocket _demuxSocket;
         private readonly IPEndPoint _endPoint;
+        private bool _registered;
 
         public CancellationToken CancellationToken;
 
@@ -42,14 +43,18 @@ namespace Okolni.Source.Query.Pool.Common.SocketHelpers
         }
 
         public async ValueTask Setup()
-
         {
             await _demuxSocket.AddListener(_endPoint, this);
+            _registered = true;
         }
 
         public async ValueTask DisposeAsync()
         {
-          await _demuxSocket.RemoveListener(_endPoint);
+            // If Setup failed (another query already listens on this endpoint), the listener isn't ours to remove
+            if (!_registered)
+                return;
+            _registered = false;
+            await _demuxSocket.RemoveListener(_endPoint);
         }
     }
 }

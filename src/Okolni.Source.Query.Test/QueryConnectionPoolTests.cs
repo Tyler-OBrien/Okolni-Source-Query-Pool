@@ -107,6 +107,29 @@ public class QueryConnectionPoolTests
     }
 
     [Fact]
+    public async Task ConcurrentQueryToSameEndPoint_FailsWithoutBreakingTheFirstQuery()
+    {
+        // Only one query per endpoint is allowed at a time. The rejected second query must not remove the
+        // first query's listener, which previously left the first query waiting forever.
+        await using var server = new FakeA2SServer { Silent = true };
+        var pool = CreatePool();
+        try
+        {
+            var first = pool.GetInfoAsync(server.EndPoint, maxRetries: 1);
+            await WaitUntil(() => pool.WaitingForResponse == 1);
+
+            await Assert.ThrowsAsync<SourceQueryException>(() => pool.GetInfoAsync(server.EndPoint, maxRetries: 1))
+                .WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            await Assert.ThrowsAsync<SourceQueryException>(() => first)
+                .WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            await pool.DisposeAsync(5);
+        }
+    }
+
+    [Fact]
     public async Task Setup_CanOnlyBeCalledOnce()
     {
         var pool = CreatePool();
