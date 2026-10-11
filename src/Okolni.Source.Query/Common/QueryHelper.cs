@@ -23,8 +23,8 @@ internal static class QueryHelper
 {
     private static async Task Request(Memory<byte> requestMessage, IPEndPoint endPoint, ISocket socket, int SendTimeout)
     {
-        var newCancellationToken = new CancellationTokenSource();
-        newCancellationToken.CancelAfter(SendTimeout);
+        // Disposed so the timer is removed straight away, instead of lingering until it fires
+        using var newCancellationToken = new CancellationTokenSource(SendTimeout);
         try
         {
             await socket.SendToAsync(requestMessage, SocketFlags.None, endPoint,
@@ -38,8 +38,7 @@ internal static class QueryHelper
 
     private static async Task<ArrayPoolMemory> ReceiveAsync(IPEndPoint endPoint, ISocket socket, int ReceiveTimeout)
     {
-        var newCancellationToken = new CancellationTokenSource();
-        newCancellationToken.CancelAfter(ReceiveTimeout);
+        using var newCancellationToken = new CancellationTokenSource(ReceiveTimeout);
         try
         {
             var udpClientReceive =

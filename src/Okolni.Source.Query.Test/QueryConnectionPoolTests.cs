@@ -130,6 +130,24 @@ public class QueryConnectionPoolTests
     }
 
     [Fact]
+    public async Task SocketReceiveBufferSize_FallsBackWhenOsRefusesTheSize()
+    {
+        var pool = CreatePool();
+        try
+        {
+            var granted = pool.SocketReceiveBufferSize;
+            pool.SocketReceiveBufferSize = int.MaxValue;
+
+            Assert.True(granted > 0);
+            Assert.True(pool.SocketReceiveBufferSize > 0);
+        }
+        finally
+        {
+            await pool.DisposeAsync(5);
+        }
+    }
+
+    [Fact]
     public async Task Setup_CanOnlyBeCalledOnce()
     {
         var pool = CreatePool();

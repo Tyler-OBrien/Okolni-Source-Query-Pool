@@ -43,6 +43,9 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
         // This only supports IPv4, but right now, so does Steam.
         m_sharedSocket = new Socket(SocketType.Dgram, ProtocolType.Udp);
         m_sharedSocket.Ttl = 255;
+        // Bursts of replies from many concurrent queries can overflow the small default buffer, and every dropped
+        // packet turns into a timeout + retry. The OS may cap this (Linux: net.core.rmem_max)
+        SocketReceiveBufferSize = DefaultSocketReceiveBufferSize;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             //https://stackoverflow.com/questions/38191968/c-sharp-udp-an-existing-connection-was-forcibly-closed-by-the-remote-host
@@ -71,6 +74,30 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
 
         if (delayInit == false) Init();
     }
+    public const int DefaultSocketReceiveBufferSize = 8 * 1024 * 1024;
+
+    /// <summary>
+    ///     Receive buffer size of the shared UDP socket. Setting it asks the OS for that size, falling back to smaller
+    ///     sizes if refused. Reading it returns what the OS actually granted.
+    /// </summary>
+    public int SocketReceiveBufferSize
+    {
+        get => m_sharedSocket.ReceiveBufferSize;
+        set
+        {
+            for (var size = value; size >= 64 * 1024; size /= 2)
+                try
+                {
+                    m_sharedSocket.ReceiveBufferSize = size;
+                    return;
+                }
+                catch (SocketException)
+                {
+                    // Over the OS limit, try smaller
+                }
+        }
+    }
+
     /// <inheritdoc />
     public int WaitingForResponse => m_demultiplexer.GetWaitingConnections();
     /// <inheritdoc />
@@ -256,6 +283,7 @@ public class QueryConnectionPool : IQueryConnectionPool, IDisposable
             }
         });
 
-        Message?.Invoke($"Starting Background worker for UDP Socket {m_sharedSocket.LocalEndPoint}");
+        Message?.Invoke(
+            $"Starting Background worker for UDP Socket {m_sharedSocket.LocalEndPoint}, receive buffer {m_sharedSocket.ReceiveBufferSize} bytes");
     }
 }
