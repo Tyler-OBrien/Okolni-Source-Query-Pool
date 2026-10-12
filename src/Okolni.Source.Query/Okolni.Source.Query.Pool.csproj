@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net8.0;net10.0;net11.0</TargetFrameworks>
     <Version>1.6.0</Version>
     <Authors>Tyler O'Brien</Authors>
     <Product>Okolni Source Query Pool</Product>
@@ -12,7 +12,7 @@
     <PackageProjectUrl></PackageProjectUrl>
     <RepositoryUrl>https://github.com/Tyler-OBrien/Okolni-Source-Query-Pool</RepositoryUrl>
     <RepositoryType>GitHub</RepositoryType>
-    <PackageReleaseNotes>                   1.6.0 Target .NET 10, local fake-server test suite, fixes found by tests
+    <PackageReleaseNotes>                   1.6.0 Targets .NET 8, 10 and 11 (about 40% less CPU on .NET 11 in the local benchmark). Fixes: multi-packet responses read past their end (phantom players), receive buffers leaked on timeouts and on incomplete or stray multi-packet responses, a rejected second query to the same endpoint removed the first query's listener so it never timed out, the caller's IPEndPoint was changed in place, timeouts set before Setup() were reset, WaitingForResponse always returned 0, and disposing right after Setup() threw. Performance: timeouts are handled per wait instead of scanning every listener after every packet, request timers are disposed, and the shared socket asks for an 8 MB receive buffer (SocketReceiveBufferSize; on Linux raise net.core.rmem_max). Tests now run against a local fake A2S server instead of live servers.
                    1.5.2  Fixed issue with challenges, handle request allocations better with ArrayPool, add ArrayPoolMemory Struct for passing around byte[] ref + memory, and properly respect the fact ArrayPool may give us an array  larger then required, so we should use Spans/Memorys to limit our view to the requested memory length region of it.
                    1.5.1: Reduce allocations by using Memory&lt;&gt; and Spans as much as possible, ArrayPool for the few necessary allocations, and using pinned heap objects
                    1.5.0 Publish performance optimizations and stable .net 8 release
